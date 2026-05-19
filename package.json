@@ -1,12 +1,22 @@
 {
-  "name": "node-red-contrib-my-openapi-node",
-  "version": "1.0.0",
-  "description": "TypeScript OpenAPI Node-RED Node",
-  "main": "src/my-node.ts",
-  "node-red": {
-    "nodes": {
-      "my-api-node": "src/node1/node.ts"
-    }
+  "name": "@itaru2622/nodegen-nodered",
+  "version": "0.2.1",
+  "description": "Node Generator for Node-RED from OpenAPI spec",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/itaru2622/nodegen-nodered.git"
+  },
+  "keywords": [
+    "nodegen",
+    "openapi",
+    "swagger",
+    "codegen",
+    "swagger-codegen"
+  ],
+  "main": "./src/index.ts",
+  "bin": {
+     "nodegen-nodered": "./build-nodes.ts"
   },
   "scripts": {
     "generate": "tsx build-nodes.ts",
