@@ -2,6 +2,7 @@
 import minimist from 'minimist';
 import path from 'node:path';
 import { parseSpec } from './src/parser.js';
+import { generate } from './src/generator.js';
 import type { CliOptions } from './src/types.js';
 
 // ============================================================
@@ -99,6 +100,10 @@ async function main() {
   }
 
   console.log('\n[OK] Spec parsed successfully. Next step: generate node files.');
+
+  console.log(`\n[3] Generating node files...`);
+  const outputDir = generate(nodeDef, opts);
+  console.log(`\n[OK] Done. Output: ${outputDir}`);
 }
 
 main().catch((err) => {
