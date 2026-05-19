@@ -1,0 +1,23 @@
+{
+  "name": "node-red-contrib-my-openapi-node",
+  "version": "1.0.0",
+  "description": "TypeScript OpenAPI Node-RED Node",
+  "main": "src/my-node.ts",
+  "node-red": {
+    "nodes": {
+      "my-api-node": "src/node1/node.ts"
+    }
+  },
+  "scripts": {
+    "generate": "tsx build-nodes.ts",
+    "start:nodered": "tsx node_modules/node-red/red.js --userDir .node-red"
+  },
+  "devDependencies": {
+    "@hey-api/openapi-ts": "0.97.2",
+    "@types/node": "^25.8.0",
+    "@types/node-red": "^1.3.5",
+    "node-red": "^4.1.10",
+    "tsx": "^4.22.1",
+    "typescript": "^6.0.3"
+  }
+}
