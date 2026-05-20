@@ -241,7 +241,7 @@ function genDefaults(nodeName: string, nodeDef: NodeDef): string {
 
   lines.push(`${ind}name:           { value: '' },`);
   lines.push(`${ind}endpoint:       { value: '${nodeDef.endpoints[0]?.operationId ?? ''}' },`);
-  lines.push(`${ind}authConfig:     { value: '', type: '${nodeName}-auth-config' },`);
+  lines.push(`${ind}authConfig:     { value: '', type: '${nodeName}-auth-config', required: false },`);
   lines.push(`${ind}tlsConfig:      { value: '', type: 'tls-config', required: false },`);
   lines.push(`${ind}followRedirects:{ value: true },`);
   lines.push(`${ind}maxRedirects:   { value: 5 },`);
