@@ -206,18 +206,19 @@ function genMultipartBody(operationId: string, fields: FieldDef[], ind: string):
     } else if (f.type === 'binary') {
       const keyType = fieldTypePropKey(operationId, f.name);
       lines.push(`${ind}const _${key} = RED.util.evaluateNodeProperty(config['${key}'], config['${keyType}'] || 'str', node, msg);`);
-      lines.push(`${ind}if (_${key} !== undefined && _${key} !== null) {`);
+      lines.push(`${ind}if (_${key} !== undefined && _${key} !== null && _${key} !== '') {`);
       lines.push(`${ind}  if (typeof _${key} === 'string') {`);
-      lines.push(`${ind}    _fd.append('${f.name}', fs.createReadStream(_${key}), { filename: require('path').basename(_${key}) });`);
+      lines.push(`${ind}    const _${key}_basename = require('path').basename(_${key});`);
+      lines.push(`${ind}    _fd.append('${f.name}', fs.createReadStream(_${key}), { filename: _${key}_basename });`);
       lines.push(`${ind}  } else {`);
-      lines.push(`${ind}    _fd.append('${f.name}', _${key}, { filename: 'upload' });`);
+      lines.push(`${ind}    _fd.append('${f.name}', _${key}, { filename: 'upload', contentType: 'application/octet-stream' });`);
       lines.push(`${ind}  }`);
       lines.push(`${ind}}`);
     } else {
       const keyType = fieldTypePropKey(operationId, f.name);
       const defType = defaultTypeStr(f.type);
       lines.push(`${ind}const _${key} = RED.util.evaluateNodeProperty(config['${key}'], config['${keyType}'] || '${defType}', node, msg);`);
-      lines.push(`${ind}if (_${key} !== undefined && _${key} !== null) _fd.append('${f.name}', String(_${key}));`);
+      lines.push(`${ind}if (_${key} !== undefined && _${key} !== null && String(_${key}) !== '') _fd.append('${f.name}', String(_${key}));`);
     }
   }
   lines.push(`${ind}requestData = _fd;`);
