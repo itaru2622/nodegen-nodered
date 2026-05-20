@@ -162,6 +162,8 @@ function genEndpointBlock(ep: EndpointDef): string {
   if (bodyFields.length > 0) {
     if (ep.contentType === 'multipart/form-data') {
       lines.push(...genMultipartBody(ep.operationId, bodyFields, ind));
+    } else if (bodyFields.length === 1 && bodyFields[0].type === 'binary') {
+      lines.push(...genRawBody(ep.operationId, bodyFields[0], ind));
     } else {
       lines.push(...genJsonBody(ep.operationId, bodyFields, ind));
     }
@@ -189,6 +191,25 @@ function genJsonBody(operationId: string, fields: FieldDef[], ind: string): stri
   }
   lines.push(`${ind}requestData = _body;`);
   lines.push(`${ind}headers['Content-Type'] = 'application/json';`);
+  return lines;
+}
+
+// ============================================================
+// Raw body builder (binary stream or plain string)
+// ============================================================
+
+function genRawBody(operationId: string, field: FieldDef, ind: string): string[] {
+  const key = fieldPropKey(operationId, field.name);
+  const keyType = fieldTypePropKey(operationId, field.name);
+  const lines: string[] = [];
+  lines.push(`${ind}const _${key} = RED.util.evaluateNodeProperty(config['${key}'], config['${keyType}'] || 'str', node, msg);`);
+  lines.push(`${ind}if (_${key} !== undefined && _${key} !== null && _${key} !== '') {`);
+  if (field.type === 'binary') {
+    lines.push(`${ind}  requestData = typeof _${key} === 'string' ? fs.createReadStream(_${key}) : _${key};`);
+  } else {
+    lines.push(`${ind}  requestData = _${key};`);
+  }
+  lines.push(`${ind}}`);
   return lines;
 }
 
