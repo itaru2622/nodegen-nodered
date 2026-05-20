@@ -1,6 +1,6 @@
 {
   "name": "@itaru2622/nodegen-nodered",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "Node Generator for Node-RED from OpenAPI spec",
   "license": "MIT",
   "repository": {
