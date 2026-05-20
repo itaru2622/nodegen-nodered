@@ -1,12 +1,6 @@
 import SwaggerParser from '@apidevtools/swagger-parser';
 import type { OpenAPI, OpenAPIV3 } from 'openapi-types';
-import type {
-  NodeDef,
-  EndpointDef,
-  FieldDef,
-  FieldType,
-  SecurityDef,
-} from './types.js';
+import type { NodeDef, EndpointDef, FieldDef, FieldType, SecurityDef } from './types.js';
 
 // ============================================================
 // Parse an OpenAPI spec file and convert it to a NodeDef
@@ -71,17 +65,20 @@ function extractEndpoint(
   let contentType: string | undefined;
   const requestBody = operation.requestBody as OpenAPIV3.RequestBodyObject | undefined;
   if (requestBody?.content) {
-    // Prefer application/json; fall back to first available content type
-    const preferredTypes = ['application/json', 'multipart/form-data'];
-    contentType =
-      preferredTypes.find((t) => requestBody.content[t]) ??
-      Object.keys(requestBody.content)[0];
+    let chosenSchema: OpenAPIV3.SchemaObject | undefined;
 
-    const mediaType = requestBody.content[contentType];
-    const bodySchema = mediaType?.schema as OpenAPIV3.SchemaObject | undefined;
-    if (bodySchema?.properties) {
-      const required = bodySchema.required ?? [];
-      for (const [name, propSchema] of Object.entries(bodySchema.properties)) {
+    for (const [ct, mt] of Object.entries(requestBody.content)) {
+      const schema = (mt as OpenAPIV3.MediaTypeObject).schema as OpenAPIV3.SchemaObject | undefined;
+      if (!schema) continue;
+      // Use the first content type that has a schema; spec order = priority
+      contentType = ct;
+      chosenSchema = schema;
+      break;
+    }
+
+    if (chosenSchema?.properties) {
+      const required = chosenSchema.required ?? [];
+      for (const [name, propSchema] of Object.entries(chosenSchema.properties)) {
         const field = schemaToField(
           name,
           propSchema as OpenAPIV3.SchemaObject,
@@ -90,6 +87,18 @@ function extractEndpoint(
           'body'
         );
         fields.push(field);
+      }
+    } else if (chosenSchema) {
+      const fieldType = resolveFieldType(chosenSchema);
+      if (fieldType !== 'unknown') {
+        // Scalar body (e.g. raw binary, plain string) — expose as a single 'body' field
+        fields.push({
+          name: 'body',
+          type: fieldType,
+          required: requestBody.required ?? false,
+          description: requestBody.description,
+          location: 'body',
+        });
       }
     }
   }
