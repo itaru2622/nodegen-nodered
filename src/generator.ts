@@ -19,9 +19,9 @@ export function generate(nodeDef: NodeDef, opts: CliOptions): string {
 
   // Generate and write each file
   const files: Record<string, string> = {
-    'package.json':       generatePackageJson(nodeDef, opts, nodeName),
-    [`${nodeName}.js`]:   generateRuntime(nodeDef, nodeName),
-    [`${nodeName}.html`]: generateHtml(nodeDef, nodeName, opts),
+    'package.json': generatePackageJson(nodeDef, opts, nodeName),
+    'node.js':      generateRuntime(nodeDef, nodeName),
+    'node.html':    generateHtml(nodeDef, nodeName, opts),
   };
 
   for (const [filename, content] of Object.entries(files)) {
