@@ -12,7 +12,7 @@ export function generatePackageJson(nodeDef: NodeDef, opts: CliOptions, nodeName
     keywords,
     'node-red': {
       nodes: {
-        [nodeName]: `${nodeName}.js`,
+        [nodeName]: 'node.js',
       },
     },
     dependencies: {
