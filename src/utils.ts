@@ -31,7 +31,7 @@ export function defaultTypeStr(fieldType: string): string {
   switch (fieldType) {
     case 'number':         return 'num';
     case 'boolean':        return 'bool';
-    case 'array-of-string': return 'json';
+    case 'array-of-string': return 'list';
     default:               return 'str';
   }
 }

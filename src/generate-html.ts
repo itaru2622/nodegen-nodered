@@ -192,6 +192,18 @@ function genFieldRow(operationId: string, field: FieldDef): string {
   }
 
   lines.push(`  </div>`);
+
+  // For array-of-string: editableList container (shown only in list mode)
+  if (field.type === 'array-of-string') {
+    lines.push(`  <div class="form-row ep-field-row array-list-row" data-endpoint="${operationId}" data-for="${key}" style="display:none">`);
+    lines.push(`    <label>&nbsp;</label>`);
+    lines.push(`    <ol id="${key}-list" style="width:70%;"></ol>`);
+    lines.push(`    <div style="margin-left:105px; margin-top:4px;">`);
+    lines.push(`      <a href="#" id="${key}-list-add" style="font-size:0.85em"><i class="fa fa-plus"></i> Add item</a>`);
+    lines.push(`    </div>`);
+    lines.push(`  </div>`);
+  }
+
   return lines.join('\n');
 }
 
@@ -220,6 +232,26 @@ function genRegistration(nodeName: string, nodeDef: NodeDef, color: string, icon
     `        var ep = $('#node-input-endpoint').val();`,
     `        $('.ep-field-row').hide();`,
     `        $('.ep-field-row[data-endpoint="' + ep + '"]').show();`,
+    `        // Re-apply list mode visibility for array-of-string fields`,
+    `        $('.array-list-row').each(function() {`,
+    `          var forKey = $(this).data('for');`,
+    `          var t = $('#node-input-' + forKey + 'Type').val() || 'list';`,
+    `          var fieldVisible = $('#node-input-' + forKey).closest('.ep-field-row').is(':visible');`,
+    `          if (t === 'list' && fieldVisible) { $(this).show(); } else { $(this).hide(); }`,
+    `        });`,
+    `      }`,
+    `      function _onEditSave() {`,
+    `        $('.array-list-row').each(function() {`,
+    `          var forKey = $(this).data('for');`,
+    `          if ($('#node-input-' + forKey + 'Type').val() !== 'list') return;`,
+    `          var items = [];`,
+    `          $(this).find('ol').editableList('items').each(function() {`,
+    `            var ti = $(this).data('typedInput');`,
+    `            var v = ti ? ti.typedInput('value') : $(this).find('input').first().val();`,
+    `            if (v !== undefined && v !== null && String(v).trim() !== '') items.push(String(v).trim());`,
+    `          });`,
+    `          $('#node-input-' + forKey).val(JSON.stringify(items));`,
+    `        });`,
     `      }`,
     `      $('#node-input-endpoint').on('change', _updateFields);`,
     `      _updateFields();`,
@@ -227,6 +259,7 @@ function genRegistration(nodeName: string, nodeDef: NodeDef, color: string, icon
     `      // typedInput widgets`,
     typedInputInits,
     `    },`,
+    `    oneditsave: function() { _onEditSave(); },`,
     `  });`,
   ].join('\n');
 }
@@ -261,7 +294,7 @@ function genDefaults(nodeName: string, nodeDef: NodeDef): string {
         const defType = defaultTypeStr(f.type);
         const defValue = f.type === 'array-of-string' ? '[]' : defVal;
         lines.push(`${ind}${key}:     { value: '${defValue}' },`);
-        lines.push(`${ind}${keyType}: { value: '${defType}' },`);
+        lines.push(`${ind}${keyType}: { value: '${defType}' },`); // list | msg | flow
       }
     }
   }
@@ -289,6 +322,40 @@ function genTypedInputInits(endpoints: EndpointDef[]): string {
       lines.push(`${ind}  typeField: '#node-input-${keyType}',`);
       lines.push(`${ind}  types: ${types},`);
       lines.push(`${ind}});`);
+
+      if (f.type === 'array-of-string') {
+        lines.push(`${ind}// editableList for '${f.name}'`);
+        lines.push(`${ind}$('#${key}-list').editableList({`);
+        lines.push(`${ind}  height: 'auto',`);
+        lines.push(`${ind}  addItem: function(container, i, opt) {`);
+        lines.push(`${ind}    var val = typeof opt.item === 'string' ? opt.item : '';`);
+        lines.push(`${ind}    var inp = $('<input/>', { type: 'text', style: 'width:100%' });`);
+        lines.push(`${ind}    inp.val(val);`);
+        lines.push(`${ind}    container.append(inp);`);
+        lines.push(`${ind}    inp.typedInput({ types: ['str'] }); // array-of-string: str only for now`);
+        lines.push(`${ind}    inp.typedInput('value', val);`);
+        lines.push(`${ind}    container.closest('li').data('typedInput', inp);`);
+        lines.push(`${ind}  },`);
+        lines.push(`${ind}  removable:  true,`);
+        lines.push(`${ind}  sortable:   true,`);
+        lines.push(`${ind}  addButton:  false,`);
+        lines.push(`${ind}});`);
+        lines.push(`${ind}try {`);
+        lines.push(`${ind}  var _${key}_saved = JSON.parse($('#node-input-${key}').val() || '[]');`);
+        lines.push(`${ind}  var _${key}_items = Array.isArray(_${key}_saved) ? _${key}_saved : [];`);
+        lines.push(`${ind}  if (_${key}_items.length === 0) _${key}_items = [''];`);
+        lines.push(`${ind}  _${key}_items.forEach(function(item) { $('#${key}-list').editableList('addItem', item); });`);
+        lines.push(`${ind}} catch(e) { $('#${key}-list').editableList('addItem', ''); }`);
+        lines.push(`${ind}$('#${key}-list-add').on('click', function(e) { e.preventDefault(); $('#${key}-list').editableList('addItem', ''); });`);
+        lines.push(`${ind}function _${key}_refreshList() {`);
+        lines.push(`${ind}  var t = $('#node-input-${keyType}').val() || 'list';`);
+        lines.push(`${ind}  var fieldVisible = $('#node-input-${key}').closest('.ep-field-row').is(':visible');`);
+        lines.push(`${ind}  if (t === 'list' && fieldVisible) { $('.array-list-row[data-for="${key}"]').show(); }`);
+        lines.push(`${ind}  else                              { $('.array-list-row[data-for="${key}"]').hide(); }`);
+        lines.push(`${ind}}`);
+        lines.push(`${ind}$('#node-input-${key}').on('change', function() { _${key}_refreshList(); });`);
+        lines.push(`${ind}_${key}_refreshList();`);
+      }
     }
   }
 
@@ -299,7 +366,7 @@ function typedInputTypes(fieldType: string): string {
   switch (fieldType) {
     case 'number':          return "['num', 'msg', 'flow', 'global', 'env']";
     case 'boolean':         return "['bool', 'msg', 'flow', 'global', 'env']";
-    case 'array-of-string': return "['json', 'msg', 'flow', 'global', 'env']";
+    case 'array-of-string': return "[{ value: 'list', label: 'list', icon: 'fa fa-list', hasValue: false }, 'msg', 'flow']";
     case 'binary':
       return "[{ value: 'str', label: 'file path', icon: 'fa fa-file' }, 'msg', 'flow', 'global', 'env']";
     default:
