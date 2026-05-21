@@ -160,6 +160,13 @@ function genEndpointBlock(ep: EndpointDef): string {
   // Body
   const bodyFields = ep.fields.filter(f => f.location === 'body');
   if (bodyFields.length > 0) {
+    /**
+     *  TODO: Refactor in the future. The logic below works for now but is ad-hoc.
+     *   - Most cases can be handled by genJsonBody.
+     *   - Other cases need to cover:
+     *     - multipart/form-data
+     *     - requestBody with a single binary field
+     */
     if (ep.contentType === 'multipart/form-data') {
       lines.push(...genMultipartBody(ep.operationId, bodyFields, ind));
     } else if (bodyFields.length === 1 && bodyFields[0].type === 'binary') {
