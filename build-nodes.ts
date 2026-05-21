@@ -1,9 +1,9 @@
 #!/usr/bin/env tsx
 import minimist from 'minimist';
 import path from 'node:path';
-import { parseSpec } from './src/parser.js';
-import { generate } from './src/generator.js';
-import type { CliOptions } from './src/types.js';
+import { parseSpec } from './src/parser';
+import { generate } from './src/generator';
+import type { CliOptions } from './src/types';
 
 // ============================================================
 // CLI entry point
