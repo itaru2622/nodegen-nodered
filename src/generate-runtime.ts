@@ -309,8 +309,10 @@ function genAxiosCall(): string {
         _axiosOpts.httpsAgent = new https.Agent(_tlsOpts);
       }
 
-      // Proxy
-      const _proxyUrl = config.proxy || process.env.HTTPS_PROXY || process.env.HTTP_PROXY;
+      // Proxy ('http proxy' config node, with env-var fallback)
+      const _proxyNode = config.proxy ? RED.nodes.getNode(config.proxy) : null;
+      const _proxyUrl  = (_proxyNode && _proxyNode.url)
+                       || process.env.HTTPS_PROXY || process.env.HTTP_PROXY || '';
       if (_proxyUrl) {
         try {
           const _pu = new URL(_proxyUrl);
@@ -319,8 +321,10 @@ function genAxiosCall(): string {
             host:     _pu.hostname,
             port:     parseInt(_pu.port || (_pu.protocol === 'https:' ? '443' : '80')),
           };
-          if (_pu.username) {
-            _axiosOpts.proxy.auth = { username: _pu.username, password: decodeURIComponent(_pu.password) };
+          const _pUser = (_proxyNode && _proxyNode.credentials && _proxyNode.credentials.username) || _pu.username || '';
+          const _pPass = (_proxyNode && _proxyNode.credentials && _proxyNode.credentials.password) || decodeURIComponent(_pu.password || '') || '';
+          if (_pUser || _pPass) {
+            _axiosOpts.proxy.auth = { username: _pUser, password: _pPass };
           }
         } catch (e) {
           node.warn('Invalid proxy URL: ' + _proxyUrl);
