@@ -252,7 +252,7 @@ function genRegistration(nodeName: string, nodeDef: NodeDef, color: string, icon
     `        if ($('#node-input-' + forKey + 'Type').val() !== 'list') return;`,
     `        var items = [];`,
     `        $(this).find('ol').editableList('items').each(function() {`,
-    `          var v = $(this).find('.aoi-val').val();`,
+    `          var v = $(this).find('.aoi-val').typedInput('value');`,
     `          if (v !== undefined && v !== null && String(v).trim() !== '') items.push(String(v).trim());`,
     `        });`,
     `        var _el = document.getElementById('node-input-' + forKey);`,
@@ -334,8 +334,9 @@ function genTypedInputInits(endpoints: EndpointDef[]): string {
         lines.push(`${ind}  addItem: function(container, i, opt) {`);
         lines.push(`${ind}    var val = typeof opt === 'string' ? opt : '';`);
         lines.push(`${ind}    var inp = $('<input/>', { type: 'text', style: 'width:100%', 'class': 'aoi-val' });`);
-        lines.push(`${ind}    inp.val(val);`);
         lines.push(`${ind}    container.append(inp);`);
+        lines.push(`${ind}    inp.typedInput({ types: ['str'] });`);
+        lines.push(`${ind}    inp.typedInput('value', val);`);
         lines.push(`${ind}  },`);
         lines.push(`${ind}  removable:  true,`);
         lines.push(`${ind}  sortable:   true,`);
