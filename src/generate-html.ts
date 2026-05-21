@@ -240,26 +240,25 @@ function genRegistration(nodeName: string, nodeDef: NodeDef, color: string, icon
     `          if (t === 'list' && fieldVisible) { $(this).show(); } else { $(this).hide(); }`,
     `        });`,
     `      }`,
-    `      function _onEditSave() {`,
-    `        $('.array-list-row').each(function() {`,
-    `          var forKey = $(this).data('for');`,
-    `          if ($('#node-input-' + forKey + 'Type').val() !== 'list') return;`,
-    `          var items = [];`,
-    `          $(this).find('ol').editableList('items').each(function() {`,
-    `            var ti = $(this).data('typedInput');`,
-    `            var v = ti ? ti.typedInput('value') : $(this).find('input').first().val();`,
-    `            if (v !== undefined && v !== null && String(v).trim() !== '') items.push(String(v).trim());`,
-    `          });`,
-    `          $('#node-input-' + forKey).val(JSON.stringify(items));`,
-    `        });`,
-    `      }`,
     `      $('#node-input-endpoint').on('change', _updateFields);`,
     `      _updateFields();`,
     ``,
     `      // typedInput widgets`,
     typedInputInits,
     `    },`,
-    `    oneditsave: function() { _onEditSave(); },`,
+    `    oneditsave: function() {`,
+    `      $('.array-list-row').each(function() {`,
+    `        var forKey = $(this).data('for');`,
+    `        if ($('#node-input-' + forKey + 'Type').val() !== 'list') return;`,
+    `        var items = [];`,
+    `        $(this).find('ol').editableList('items').each(function() {`,
+    `          var v = $(this).find('.aoi-val').val();`,
+    `          if (v !== undefined && v !== null && String(v).trim() !== '') items.push(String(v).trim());`,
+    `        });`,
+    `        var _el = document.getElementById('node-input-' + forKey);`,
+    `        if (_el) _el.value = JSON.stringify(items);`,
+    `      });`,
+    `    },`,
     `  });`,
   ].join('\n');
 }
@@ -318,6 +317,11 @@ function genTypedInputInits(endpoints: EndpointDef[]): string {
       const keyType = fieldTypePropKey(ep.operationId, f.name);
       const types   = typedInputTypes(f.type);
 
+      if (f.type === 'array-of-string') {
+        // Read saved JSON BEFORE typedInput init: typedInput with hasValue:false clears the input value on init
+        lines.push(`${ind}var _${key}_rawJson = $('#node-input-${key}').val() || '[]';`);
+      }
+
       lines.push(`${ind}$('#node-input-${key}').typedInput({`);
       lines.push(`${ind}  typeField: '#node-input-${keyType}',`);
       lines.push(`${ind}  types: ${types},`);
@@ -328,20 +332,17 @@ function genTypedInputInits(endpoints: EndpointDef[]): string {
         lines.push(`${ind}$('#${key}-list').editableList({`);
         lines.push(`${ind}  height: 'auto',`);
         lines.push(`${ind}  addItem: function(container, i, opt) {`);
-        lines.push(`${ind}    var val = typeof opt.item === 'string' ? opt.item : '';`);
-        lines.push(`${ind}    var inp = $('<input/>', { type: 'text', style: 'width:100%' });`);
+        lines.push(`${ind}    var val = typeof opt === 'string' ? opt : '';`);
+        lines.push(`${ind}    var inp = $('<input/>', { type: 'text', style: 'width:100%', 'class': 'aoi-val' });`);
         lines.push(`${ind}    inp.val(val);`);
         lines.push(`${ind}    container.append(inp);`);
-        lines.push(`${ind}    inp.typedInput({ types: ['str'] }); // array-of-string: str only for now`);
-        lines.push(`${ind}    inp.typedInput('value', val);`);
-        lines.push(`${ind}    container.closest('li').data('typedInput', inp);`);
         lines.push(`${ind}  },`);
         lines.push(`${ind}  removable:  true,`);
         lines.push(`${ind}  sortable:   true,`);
         lines.push(`${ind}  addButton:  false,`);
         lines.push(`${ind}});`);
         lines.push(`${ind}try {`);
-        lines.push(`${ind}  var _${key}_saved = JSON.parse($('#node-input-${key}').val() || '[]');`);
+        lines.push(`${ind}  var _${key}_saved = JSON.parse(_${key}_rawJson);`);
         lines.push(`${ind}  var _${key}_items = Array.isArray(_${key}_saved) ? _${key}_saved : [];`);
         lines.push(`${ind}  if (_${key}_items.length === 0) _${key}_items = [''];`);
         lines.push(`${ind}  _${key}_items.forEach(function(item) { $('#${key}-list').editableList('addItem', item); });`);
