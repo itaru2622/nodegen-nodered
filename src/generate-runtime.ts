@@ -153,8 +153,13 @@ function genEndpointBlock(ep: EndpointDef): string {
   for (const f of queryFields) {
     const key = fieldPropKey(ep.operationId, f.name);
     const keyType = fieldTypePropKey(ep.operationId, f.name);
-    lines.push(`${ind}const _${key} = RED.util.evaluateNodeProperty(config['${key}'], config['${keyType}'] || 'str', node, msg);`);
-    lines.push(`${ind}if (_${key} !== undefined && _${key} !== null) params['${f.name}'] = _${key};`);
+    if (f.type === 'array-of-string') {
+      lines.push(...genResolveArrayOfString(key, keyType, key, ind));
+      lines.push(`${ind}if (_${key} !== undefined && _${key} !== null) params['${f.name}'] = _${key};`);
+    } else {
+      lines.push(`${ind}const _${key} = RED.util.evaluateNodeProperty(config['${key}'], config['${keyType}'] || 'str', node, msg);`);
+      lines.push(`${ind}if (_${key} !== undefined && _${key} !== null) params['${f.name}'] = _${key};`);
+    }
   }
 
   // Body
@@ -180,6 +185,24 @@ function genEndpointBlock(ep: EndpointDef): string {
 }
 
 // ============================================================
+// Helper: resolve an array-of-string field into `let _${varSuffix}`
+// - 'list' mode: JSON.parse from config
+// - 'msg'/'flow' mode: evaluateNodeProperty
+// ============================================================
+
+function genResolveArrayOfString(key: string, keyType: string, varSuffix: string, ind: string): string[] {
+  return [
+    `${ind}const _${varSuffix}_t = config['${keyType}'] || 'list';`,
+    `${ind}let _${varSuffix};`,
+    `${ind}if (_${varSuffix}_t === 'list') {`,
+    `${ind}  try { _${varSuffix} = JSON.parse(config['${key}'] || '[]'); } catch(e) { _${varSuffix} = []; }`,
+    `${ind}} else {`,
+    `${ind}  _${varSuffix} = RED.util.evaluateNodeProperty(config['${key}'], _${varSuffix}_t, node, msg);`,
+    `${ind}}`,
+  ];
+}
+
+// ============================================================
 // JSON body builder
 // ============================================================
 
@@ -190,6 +213,10 @@ function genJsonBody(operationId: string, fields: FieldDef[], ind: string): stri
     const key = fieldPropKey(operationId, f.name);
     if (f.type === 'enum') {
       lines.push(`${ind}_body['${f.name}'] = config['${key}'];`);
+    } else if (f.type === 'array-of-string') {
+      const keyType = fieldTypePropKey(operationId, f.name);
+      lines.push(...genResolveArrayOfString(key, keyType, key, ind));
+      lines.push(`${ind}_body['${f.name}'] = _${key};`);
     } else {
       const keyType = fieldTypePropKey(operationId, f.name);
       const defType = defaultTypeStr(f.type);
@@ -242,6 +269,10 @@ function genMultipartBody(operationId: string, fields: FieldDef[], ind: string):
       lines.push(`${ind}    _fd.append('${f.name}', _${key}, { filename: 'upload', contentType: 'application/octet-stream' });`);
       lines.push(`${ind}  }`);
       lines.push(`${ind}}`);
+    } else if (f.type === 'array-of-string') {
+      const keyType = fieldTypePropKey(operationId, f.name);
+      lines.push(...genResolveArrayOfString(key, keyType, key, ind));
+      lines.push(`${ind}if (Array.isArray(_${key})) { _${key}.forEach(function(item) { _fd.append('${f.name}', String(item)); }); }`);
     } else {
       const keyType = fieldTypePropKey(operationId, f.name);
       const defType = defaultTypeStr(f.type);
