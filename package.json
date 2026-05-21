@@ -14,9 +14,9 @@
     "codegen",
     "swagger-codegen"
   ],
-  "main": "./src/index.ts",
+  "main": "src/index.ts",
   "bin": {
-     "nodegen-nodered": "./build-nodes.ts"
+    "nodegen-nodered": "build-nodes.ts"
   },
   "scripts": {
     "generate": "tsx build-nodes.ts",
