@@ -146,7 +146,7 @@ function genTemplate(nodeName: string, nodeDef: NodeDef): string {
   // Proxy
   lines.push(`  <div class="form-row">`);
   lines.push(`    <label for="node-input-proxy"><i class="fa fa-exchange"></i> Proxy</label>`);
-  lines.push(`    <input type="text" id="node-input-proxy" placeholder="http://proxy:8080 (or leave blank)">`);
+  lines.push(`    <input type="text" id="node-input-proxy">`);
   lines.push(`  </div>`);
 
   // Follow redirects
@@ -277,7 +277,7 @@ function genDefaults(nodeName: string, nodeDef: NodeDef): string {
   lines.push(`${ind}tlsConfig:      { value: '', type: 'tls-config', required: false },`);
   lines.push(`${ind}followRedirects:{ value: true },`);
   lines.push(`${ind}maxRedirects:   { value: 5 },`);
-  lines.push(`${ind}proxy:          { value: '' },`);
+  lines.push(`${ind}proxy:          { value: '', type: 'http proxy', required: false },`);
 
   for (const ep of nodeDef.endpoints) {
     for (const f of ep.fields) {
