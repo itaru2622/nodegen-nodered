@@ -265,6 +265,13 @@ function genMultipartBody(operationId: string, fields: FieldDef[], ind: string):
       lines.push(`${ind}  if (typeof _${key} === 'string') {`);
       lines.push(`${ind}    const _${key}_basename = require('path').basename(_${key});`);
       lines.push(`${ind}    _fd.append('${f.name}', fs.createReadStream(_${key}), { filename: _${key}_basename });`);
+      lines.push(`${ind}  } else if (_${key} && typeof _${key} === 'object' && 'value' in _${key}) {`);
+      lines.push(`${ind}    // node-red standard http request compatibility: { value: Buffer, options: { filename, contentType } }`);
+      lines.push(`${ind}    _fd.append('${f.name}', _${key}.value, _${key}.options || {});`);
+      lines.push(`${ind}  } else if (Buffer.isBuffer(_${key})) {`);
+      lines.push(`${ind}    // keep simplest flow: direct connection from read file node as msg.payload`);
+      lines.push(`${ind}    const _${key}_fname = msg.filename ? require('path').basename(msg.filename) : 'upload.bin';`);
+      lines.push(`${ind}    _fd.append('${f.name}', _${key}, { filename: _${key}_fname });`);
       lines.push(`${ind}  } else {`);
       lines.push(`${ind}    _fd.append('${f.name}', _${key}, { filename: 'upload', contentType: 'application/octet-stream' });`);
       lines.push(`${ind}  }`);
