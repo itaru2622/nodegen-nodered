@@ -72,6 +72,20 @@ function genMainNodeHtml(nodeName: string, nodeDef: NodeDef, opts: CliOptions): 
   const color = opts.color ? `#${opts.color}` : '#87A980';
   const icon  = opts.icon  ? opts.icon        : 'font-awesome/fa-cloud';
 
+  // Collect all binary fields across all endpoints (deduplicate by field name)
+  const binaryFields = [
+    ...new Map(
+      nodeDef.endpoints
+        .flatMap(ep => ep.fields.filter(f => f.type === 'binary'))
+        .map(f => [f.name, f])
+    ).values()
+  ];
+  const binaryHelpBlocks = binaryFields.map(f => [
+    `  <h3>${f.name}</h3>`,
+    `  <p>To pass a file from a flow, set <b>${f.name}</b> to <code>msg.payload.${f.name}</code> in the UI, and send like below:</p>`,
+    `  <pre>msg.payload = {\n  "${f.name}": {\n    "value": &lt;Buffer&gt;,        // file binary content (Buffer type)\n    "options": {\n      "filename": "yourfile.jpg"  // any filename with appropriate extension\n    }\n  }\n}</pre>`,
+  ].join('\n')).join('\n');
+
   return [
     `<!-- ===== Main Node ===== -->`,
     `<script type="text/html" data-template-name="${nodeName}">`,
@@ -81,6 +95,7 @@ function genMainNodeHtml(nodeName: string, nodeDef: NodeDef, opts: CliOptions): 
     `<script type="text/html" data-help-name="${nodeName}">`,
     `  <p>${nodeDef.description ?? nodeDef.title}</p>`,
     `  <p>Select an endpoint from the dropdown, fill in the fields, and send a message to trigger the API call.</p>`,
+    binaryHelpBlocks,
     `  <h3>Output</h3>`,
     `  <dl class="message-properties">`,
     `    <dt>payload</dt><dd>Response body from the API.</dd>`,
