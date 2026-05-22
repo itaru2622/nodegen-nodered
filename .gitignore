@@ -4,3 +4,4 @@
 **/.node-red/
 **/generated/
 **/openapi-spec/
+**/.vscode/
