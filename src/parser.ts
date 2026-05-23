@@ -1,6 +1,6 @@
 import SwaggerParser from '@apidevtools/swagger-parser';
 import type { OpenAPI, OpenAPIV3 } from 'openapi-types';
-import type { NodeDef, EndpointDef, FieldDef, FieldType, SecurityDef } from './types.js';
+import type { NodeDef, EndpointDef, FieldDef, FieldType, SecurityDef } from './types';
 
 // ============================================================
 // Parse an OpenAPI spec file and convert it to a NodeDef
