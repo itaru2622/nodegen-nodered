@@ -1,5 +1,5 @@
-import type { NodeDef, EndpointDef, FieldDef, SecurityDef, CliOptions } from './types.js';
-import { fieldPropKey, fieldTypePropKey, defaultTypeStr } from './utils.js';
+import type { NodeDef, EndpointDef, FieldDef, SecurityDef, CliOptions } from './types';
+import { fieldPropKey, fieldTypePropKey, defaultTypeStr } from './utils';
 
 // ============================================================
 // Generate the Node-RED editor .html file
