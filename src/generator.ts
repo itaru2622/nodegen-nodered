@@ -1,10 +1,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import type { NodeDef, CliOptions } from './types.js';
-import { toNodeName } from './utils.js';
-import { generatePackageJson } from './generate-package-json.js';
-import { generateRuntime } from './generate-runtime.js';
-import { generateHtml } from './generate-html.js';
+import type { NodeDef, CliOptions } from './types';
+import { toNodeName } from './utils';
+import { generatePackageJson } from './generate-package-json';
+import { generateRuntime } from './generate-runtime';
+import { generateHtml } from './generate-html';
 
 // ============================================================
 // Orchestrate file generation and write output to disk
