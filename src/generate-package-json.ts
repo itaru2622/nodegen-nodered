@@ -1,4 +1,4 @@
-import type { NodeDef, CliOptions } from './types.js';
+import type { NodeDef, CliOptions } from './types';
 
 export function generatePackageJson(nodeDef: NodeDef, opts: CliOptions, nodeName: string): string {
   const moduleName = opts.module ?? `${opts.prefix}${nodeName}`;
