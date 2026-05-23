@@ -1,5 +1,5 @@
-import type { NodeDef, EndpointDef, FieldDef, SecurityDef } from './types.js';
-import { toPascalCase, fieldPropKey, fieldTypePropKey, defaultTypeStr } from './utils.js';
+import type { NodeDef, EndpointDef, FieldDef, SecurityDef } from './types';
+import { toPascalCase, fieldPropKey, fieldTypePropKey, defaultTypeStr } from './utils';
 
 // ============================================================
 // Generate the Node-RED runtime .js file
