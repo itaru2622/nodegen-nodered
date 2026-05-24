@@ -86,6 +86,29 @@ function genMainNodeHtml(nodeName: string, nodeDef: NodeDef, opts: CliOptions): 
     `  <pre>msg.payload = {\n  "${f.name}": {\n    "value": &lt;Buffer&gt;,        // file binary content (Buffer type)\n    "options": {\n      "filename": "yourfile.jpg"  // any filename with appropriate extension\n    }\n  }\n}</pre>`,
   ].join('\n')).join('\n');
 
+  // Collect all additionalProperties fields across all endpoints (deduplicate by field name)
+  const apFields = [
+    ...new Map(
+      nodeDef.endpoints
+        .flatMap(ep => ep.fields.filter(f => f.isAdditionalProperties))
+        .map(f => [f.name, f])
+    ).values()
+  ];
+  const apHelpBlocks = apFields.length === 0 ? '' : [
+    `  <h3>Additional Properties fields</h3>`,
+    `  <p>Fields marked as <b>additionalProperties</b> (e.g. <b>${apFields.map(f => f.name).join(', ')}</b>) support two modes:</p>`,
+    `  <dl>`,
+    `    <dt><b>map</b> mode</dt>`,
+    `    <dd>Define key-value pairs statically in the UI. Each value can be a literal string/number/boolean, or reference a <code>msg</code>, <code>flow</code>, <code>global</code>, or <code>env</code> property.<br>`,
+    `    Use this when you know the keys at design time.<br>`,
+    `    Example: add a row <code>propA</code> → <code>"hello"</code> to send a fixed value, or <code>propA</code> → <code>msg.payload.propA</code> to inject a value from the incoming message.</dd>`,
+    `    <dt><b>msg / flow / global / env</b> mode</dt>`,
+    `    <dd>Point to an object (e.g. <code>msg.payload.extra</code>). All key-value pairs in that object are spread as additional properties.<br>`,
+    `    Use this when the set of keys is dynamic and determined by the upstream flow.<br>`,
+    `    Note: mixing statically defined keys with a dynamic object in the same request is not supported.</dd>`,
+    `  </dl>`,
+  ].join('\n');
+
   return [
     `<!-- ===== Main Node ===== -->`,
     `<script type="text/html" data-template-name="${nodeName}">`,
@@ -96,6 +119,7 @@ function genMainNodeHtml(nodeName: string, nodeDef: NodeDef, opts: CliOptions): 
     `  <p>${nodeDef.description ?? nodeDef.title}</p>`,
     `  <p>Select an endpoint from the dropdown, fill in the fields, and send a message to trigger the API call.</p>`,
     binaryHelpBlocks,
+    apHelpBlocks,
     `  <h3>Output</h3>`,
     `  <dl class="message-properties">`,
     `    <dt>payload</dt><dd>Response body from the API.</dd>`,
