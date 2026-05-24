@@ -30,6 +30,7 @@ export interface EndpointDef {
   summary?: string;      // Short description
   contentType?: string;  // e.g. 'application/json' | 'multipart/form-data'
   fields: FieldDef[];    // Flattened list of input fields
+  isAdditionalProperties?: boolean; // indicate if this field located in additionalproperties or normal field.
 }
 
 /** Node definition extracted from an entire OpenAPI spec */
