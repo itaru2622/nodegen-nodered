@@ -88,10 +88,17 @@ function extractEndpoint(
         );
         fields.push(field);
       }
+      // additionalProperties alongside properties
+      if (chosenSchema.additionalProperties) {
+        fields.push(makeAdditionalPropertiesField('additional_properties', chosenSchema.additionalProperties as OpenAPIV3.SchemaObject | boolean, false, 'body'));
+      }
+    } else if (chosenSchema?.additionalProperties) {
+      // Entire body is additionalProperties
+      fields.push(makeAdditionalPropertiesField('body', chosenSchema.additionalProperties as OpenAPIV3.SchemaObject | boolean, requestBody.required ?? false, 'body'));
     } else if (chosenSchema) {
+      // Entire body is single field, cares Scalar body (e.g. raw binary, plain string)
       const fieldType = resolveFieldType(chosenSchema);
       if (fieldType !== 'unknown') {
-        // Scalar body (e.g. raw binary, plain string) — expose as a single 'body' field
         fields.push({
           name: 'body',
           type: fieldType,
@@ -145,6 +152,26 @@ function resolveFieldType(schema: OpenAPIV3.SchemaObject): FieldType {
   if (schema.type === 'integer' || schema.type === 'number') return 'number';
   if (schema.type === 'boolean') return 'boolean';
   return 'unknown';
+}
+
+// Build a FieldDef for an additionalProperties entry
+function makeAdditionalPropertiesField(
+  name: string,
+  additionalProperties: OpenAPIV3.SchemaObject | boolean,
+  required: boolean,
+  location: FieldDef['location']
+): FieldDef {
+  let type: FieldType = 'unknown';
+  if (additionalProperties !== true && additionalProperties !== false) {
+    type = resolveFieldType(additionalProperties as OpenAPIV3.SchemaObject);
+  }
+  return {
+    name,
+    type,
+    required,
+    location,
+    isAdditionalProperties: true,
+  };
 }
 
 // ============================================================
