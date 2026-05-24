@@ -199,9 +199,9 @@ function genFieldRow(operationId: string, field: FieldDef): string {
     }
     lines.push(`    </select>`);
   } else {
-    const placeholder = field.description
-      ? field.description.slice(0, 60)
-      : field.name;
+    const placeholder = field.isAdditionalProperties
+      ? '(map)'
+      : (field.description ? field.description.slice(0, 60) : field.name);
     lines.push(`    <input type="text" id="node-input-${key}" placeholder="${placeholder}" style="width:68%">`);
     lines.push(`    <input type="hidden" id="node-input-${keyType}">`);
   }
@@ -215,6 +215,17 @@ function genFieldRow(operationId: string, field: FieldDef): string {
     lines.push(`    <ol id="${key}-list" style="width:70%;"></ol>`);
     lines.push(`    <div style="margin-left:105px; margin-top:4px;">`);
     lines.push(`      <a href="#" id="${key}-list-add" style="font-size:0.85em"><i class="fa fa-plus"></i> Add item</a>`);
+    lines.push(`    </div>`);
+    lines.push(`  </div>`);
+  }
+
+  // For additionalProperties: editableList container with key+value rows
+  if (field.isAdditionalProperties) {
+    lines.push(`  <div class="form-row ep-field-row ap-list-row" data-endpoint="${operationId}" data-for="${key}" style="display:none">`);
+    lines.push(`    <label>&nbsp;</label>`);
+    lines.push(`    <div style="width: calc(100% - 116px)">`);
+    lines.push(`      <ol id="${key}-ap-list"></ol>`);
+    lines.push(`      <a href="#" id="${key}-ap-list-add" style="font-size:0.85em"><i class="fa fa-plus"></i> Add entry</a>`);
     lines.push(`    </div>`);
     lines.push(`  </div>`);
   }
@@ -254,6 +265,13 @@ function genRegistration(nodeName: string, nodeDef: NodeDef, color: string, icon
     `          var fieldVisible = $('#node-input-' + forKey).closest('.ep-field-row').is(':visible');`,
     `          if (t === 'list' && fieldVisible) { $(this).show(); } else { $(this).hide(); }`,
     `        });`,
+    `        // Re-apply map mode visibility for additionalProperties fields`,
+    `        $('.ap-list-row').each(function() {`,
+    `          var forKey = $(this).data('for');`,
+    `          var t = $('#node-input-' + forKey + 'Type').val() || 'map';`,
+    `          var fieldVisible = $('#node-input-' + forKey).closest('.ep-field-row').is(':visible');`,
+    `          if (t === 'map' && fieldVisible) { $(this).show(); } else { $(this).hide(); }`,
+    `        });`,
     `      }`,
     `      $('#node-input-endpoint').on('change', _updateFields);`,
     `      _updateFields();`,
@@ -273,7 +291,19 @@ function genRegistration(nodeName: string, nodeDef: NodeDef, color: string, icon
     `        var _el = document.getElementById('node-input-' + forKey);`,
     `        if (_el) _el.value = JSON.stringify(items);`,
     `      });`,
-    `    },`,
+    `      $('.ap-list-row').each(function() {`,
+    `        var forKey = $(this).data('for');`,
+    `        if ($('#node-input-' + forKey + 'Type').val() !== 'map') return;`,
+    `        var obj = {};`,
+    `        $(this).find('ol').editableList('items').each(function() {`,
+    `          var k = String($(this).find('.ap-key').val() || '').trim();`,
+    `          var v = $(this).find('.ap-val').typedInput('value');`,
+    `          if (k !== '') obj[k] = v;`,
+    `        });`,
+    `        var _el = document.getElementById('node-input-' + forKey);`,
+    `        if (_el) _el.value = JSON.stringify(obj);`,
+    `      });`,
+    `    }`,
     `  });`,
   ].join('\n');
 }
@@ -304,6 +334,9 @@ function genDefaults(nodeName: string, nodeDef: NodeDef): string {
 
       if (f.type === 'enum') {
         lines.push(`${ind}${key}: { value: '${defVal}' },`);
+      } else if (f.isAdditionalProperties) {
+        lines.push(`${ind}${key}:     { value: '{}' },`);
+        lines.push(`${ind}${keyType}: { value: 'map' },`);
       } else {
         const defType = defaultTypeStr(f.type);
         const defValue = f.type === 'array-of-string' ? '[]' : defVal;
@@ -330,6 +363,54 @@ function genTypedInputInits(endpoints: EndpointDef[]): string {
 
       const key     = fieldPropKey(ep.operationId, f.name);
       const keyType = fieldTypePropKey(ep.operationId, f.name);
+
+      if (f.isAdditionalProperties) {
+        const valTypes = apValueTypes(f.type);
+        lines.push(`${ind}var _${key}_rawJson = $('#node-input-${key}').val() || '{}';`);
+        lines.push(`${ind}$('#node-input-${key}').typedInput({`);
+        lines.push(`${ind}  typeField: '#node-input-${keyType}',`);
+        lines.push(`${ind}  types: [{ value: 'map', label: 'map', icon: 'fa fa-table', hasValue: false }, 'msg', 'flow', 'global', 'env'],`);
+        lines.push(`${ind}});`);
+        lines.push(`${ind}// editableList for '${f.name}' (additionalProperties)`);
+        lines.push(`${ind}$('#${key}-ap-list').editableList({`);
+        lines.push(`${ind}  height: 'auto',`);
+        lines.push(`${ind}  addItem: function(container, i, opt) {`);
+        lines.push(`${ind}    var _k = (opt && opt.k !== undefined) ? String(opt.k) : '';`);
+        lines.push(`${ind}    var _v = (opt && opt.v !== undefined) ? String(opt.v) : '';`);
+        lines.push(`${ind}    var row = $('<div>').css({ display: 'flex', gap: '4px', alignItems: 'center', width: '100%' });`);
+        lines.push(`${ind}    var keyInp = $('<input>', { type: 'text', placeholder: 'key', 'class': 'ap-key' }).css({ width: '35%', flex: 'none' });`);
+        lines.push(`${ind}    keyInp.val(_k);`);
+        lines.push(`${ind}    var valInp = $('<input>', { type: 'text', 'class': 'ap-val' });`);
+        lines.push(`${ind}    row.append(keyInp).append(valInp);`);
+        lines.push(`${ind}    container.append(row);`);
+        lines.push(`${ind}    valInp.typedInput({ types: ${valTypes} });`);
+        lines.push(`${ind}    valInp.typedInput('value', _v);`);
+        lines.push(`${ind}    // In Node-RED v4, typedInput converts the input to type=hidden and adds a sibling div.red-ui-typedInput-container`);
+        lines.push(`${ind}    valInp.next('.red-ui-typedInput-container').css({ flex: '1', minWidth: '0', width: '' });`);
+        lines.push(`${ind}  },`);
+        lines.push(`${ind}  removable: true,`);
+        lines.push(`${ind}  sortable: true,`);
+        lines.push(`${ind}  addButton: false,`);
+        lines.push(`${ind}});`);
+        lines.push(`${ind}try {`);
+        lines.push(`${ind}  var _${key}_saved = JSON.parse(_${key}_rawJson);`);
+        lines.push(`${ind}  var _${key}_entries = (typeof _${key}_saved === 'object' && !Array.isArray(_${key}_saved) && _${key}_saved !== null)`);
+        lines.push(`${ind}    ? Object.entries(_${key}_saved) : [];`);
+        lines.push(`${ind}  if (_${key}_entries.length === 0) _${key}_entries = [['', '']];`);
+        lines.push(`${ind}  _${key}_entries.forEach(function(e) { $('#${key}-ap-list').editableList('addItem', { k: e[0], v: e[1] }); });`);
+        lines.push(`${ind}} catch(e) { $('#${key}-ap-list').editableList('addItem', { k: '', v: '' }); }`);
+        lines.push(`${ind}$('#${key}-ap-list-add').on('click', function(e) { e.preventDefault(); $('#${key}-ap-list').editableList('addItem', { k: '', v: '' }); });`);
+        lines.push(`${ind}function _${key}_refreshAp() {`);
+        lines.push(`${ind}  var t = $('#node-input-${keyType}').val() || 'map';`);
+        lines.push(`${ind}  var fieldVisible = $('#node-input-${key}').closest('.ep-field-row').is(':visible');`);
+        lines.push(`${ind}  if (t === 'map' && fieldVisible) { $('.ap-list-row[data-for="${key}"]').show(); }`);
+        lines.push(`${ind}  else                             { $('.ap-list-row[data-for="${key}"]').hide(); }`);
+        lines.push(`${ind}}`);
+        lines.push(`${ind}$('#node-input-${key}').on('change', function() { _${key}_refreshAp(); });`);
+        lines.push(`${ind}_${key}_refreshAp();`);
+        continue;
+      }
+
       const types   = typedInputTypes(f.type);
 
       if (f.type === 'array-of-string') {
@@ -388,5 +469,15 @@ function typedInputTypes(fieldType: string): string {
       return "[{ value: 'str', label: 'file path', icon: 'fa fa-file' }, 'msg', 'flow', 'global', 'env']";
     default:
       return "['str', 'msg', 'flow', 'global', 'env']";
+  }
+}
+
+/** TypedInput types for each value cell inside an additionalProperties editableList row */
+function apValueTypes(fieldType: string): string {
+  switch (fieldType) {
+    case 'number':  return "['num', 'msg', 'flow']";
+    case 'boolean': return "['bool', 'msg', 'flow']";
+    case 'string':  return "['str', 'msg', 'flow']";
+    default:        return "['str', 'num', 'bool', 'json', 'msg', 'flow']";
   }
 }
