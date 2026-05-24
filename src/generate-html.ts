@@ -295,9 +295,20 @@ function genRegistration(nodeName: string, nodeDef: NodeDef, color: string, icon
     `        var forKey = $(this).data('for');`,
     `        if ($('#node-input-' + forKey + 'Type').val() !== 'map') return;`,
     `        var obj = {};`,
-    `        $(this).find('ol').editableList('items').each(function() {`,
+    `        $(this).find('ol[id]').editableList('items').each(function() {`,
     `          var k = String($(this).find('.ap-key').val() || '').trim();`,
-    `          var v = $(this).find('.ap-val').typedInput('value');`,
+    `          var subList = $(this).find('.ap-val-list');`,
+    `          var v;`,
+    `          if (subList.length > 0) {`,
+    `            var arr = [];`,
+    `            subList.editableList('items').each(function() {`,
+    `              var sv = $(this).find('.aoi-val').typedInput('value');`,
+    `              if (sv !== undefined && sv !== null && String(sv).trim() !== '') arr.push(String(sv).trim());`,
+    `            });`,
+    `            v = arr;`,
+    `          } else {`,
+    `            v = $(this).find('.ap-val').typedInput('value');`,
+    `          }`,
     `          if (k !== '') obj[k] = v;`,
     `        });`,
     `        var _el = document.getElementById('node-input-' + forKey);`,
@@ -375,19 +386,48 @@ function genTypedInputInits(endpoints: EndpointDef[]): string {
         lines.push(`${ind}$('#${key}-ap-list').editableList({`);
         lines.push(`${ind}  height: 'auto',`);
         lines.push(`${ind}  addItem: function(container, i, opt) {`);
-        lines.push(`${ind}    var _k = (opt && opt.k !== undefined) ? String(opt.k) : '';`);
-        lines.push(`${ind}    var _v = (opt && opt.v !== undefined) ? String(opt.v) : '';`);
-        lines.push(`${ind}    var row = $('<div>').css({ display: 'flex', gap: '4px', alignItems: 'center', width: '100%' });`);
-        lines.push(`${ind}    var keyInp = $('<input>', { type: 'text', placeholder: 'key', 'class': 'ap-key' }).css({ width: '35%', flex: 'none' });`);
-        lines.push(`${ind}    keyInp.val(_k);`);
-        lines.push(`${ind}    var valInp = $('<input>', { type: 'text', 'class': 'ap-val' });`);
-        lines.push(`${ind}    row.append(keyInp).append(valInp);`);
-        lines.push(`${ind}    container.append(row);`);
-        lines.push(`${ind}    valInp.typedInput({ types: ${valTypes} });`);
-        lines.push(`${ind}    valInp.typedInput('value', _v);`);
-        lines.push(`${ind}    // In Node-RED v4, typedInput converts the input to type=hidden and adds a sibling div.red-ui-typedInput-container`);
-        lines.push(`${ind}    valInp.next('.red-ui-typedInput-container').css({ flex: '1', minWidth: '0', width: '' });`);
-        lines.push(`${ind}  },`);
+        if (f.type === 'array-of-string') {
+          // Value is an array: render a mini editableList inside each AP row
+          lines.push(`${ind}    var _k = (opt && opt.k !== undefined) ? String(opt.k) : '';`);
+          lines.push(`${ind}    var _varr = (opt && Array.isArray(opt.v)) ? opt.v : [];`);
+          lines.push(`${ind}    var row = $('<div>').css({ display: 'flex', gap: '4px', alignItems: 'flex-start', width: '100%' });`);
+          lines.push(`${ind}    var keyInp = $('<input>', { type: 'text', placeholder: 'key', 'class': 'ap-key' }).css({ width: '35%', flex: 'none', marginTop: '6px' });`);
+          lines.push(`${ind}    keyInp.val(_k);`);
+          lines.push(`${ind}    var valWrap = $('<div>').css({ flex: '1', minWidth: '0' });`);
+          lines.push(`${ind}    var valList = $('<ol>').addClass('ap-val-list');`);
+          lines.push(`${ind}    var addLnk = $('<a>').attr('href','#').css({ fontSize:'0.8em', display:'block', marginTop:'2px' }).html('<i class="fa fa-plus"></i> add item');`);
+          lines.push(`${ind}    valWrap.append(valList).append(addLnk);`);
+          lines.push(`${ind}    row.append(keyInp).append(valWrap);`);
+          lines.push(`${ind}    container.append(row);`);
+          lines.push(`${ind}    valList.editableList({`);
+          lines.push(`${ind}      height: 'auto',`);
+          lines.push(`${ind}      addItem: function(c, i2, v) {`);
+          lines.push(`${ind}        var inp = $('<input>', { type: 'text', style: 'width:100%', 'class': 'aoi-val' });`);
+          lines.push(`${ind}        c.append(inp);`);
+          lines.push(`${ind}        inp.typedInput({ types: ['str'] });`);
+          lines.push(`${ind}        inp.typedInput('value', typeof v === 'string' ? v : '');`);
+          lines.push(`${ind}      },`);
+          lines.push(`${ind}      removable: true, sortable: true, addButton: false,`);
+          lines.push(`${ind}    });`);
+          lines.push(`${ind}    (_varr.length > 0 ? _varr : ['']).forEach(function(v) { valList.editableList('addItem', String(v)); });`);
+          lines.push(`${ind}    addLnk.on('click', function(e) { e.preventDefault(); valList.editableList('addItem', ''); });`);
+          lines.push(`${ind}  },`);
+        } else {
+          // Value is a scalar: use typedInput
+          lines.push(`${ind}    var _k = (opt && opt.k !== undefined) ? String(opt.k) : '';`);
+          lines.push(`${ind}    var _v = (opt && opt.v !== undefined) ? String(opt.v) : '';`);
+          lines.push(`${ind}    var row = $('<div>').css({ display: 'flex', gap: '4px', alignItems: 'center', width: '100%' });`);
+          lines.push(`${ind}    var keyInp = $('<input>', { type: 'text', placeholder: 'key', 'class': 'ap-key' }).css({ width: '35%', flex: 'none' });`);
+          lines.push(`${ind}    keyInp.val(_k);`);
+          lines.push(`${ind}    var valInp = $('<input>', { type: 'text', 'class': 'ap-val' });`);
+          lines.push(`${ind}    row.append(keyInp).append(valInp);`);
+          lines.push(`${ind}    container.append(row);`);
+          lines.push(`${ind}    valInp.typedInput({ types: ${valTypes} });`);
+          lines.push(`${ind}    valInp.typedInput('value', _v);`);
+          lines.push(`${ind}    // In Node-RED v4, typedInput converts the input to type=hidden and adds a sibling div.red-ui-typedInput-container`);
+          lines.push(`${ind}    valInp.next('.red-ui-typedInput-container').css({ flex: '1', minWidth: '0', width: '' });`);
+          lines.push(`${ind}  },`);
+        }
         lines.push(`${ind}  removable: true,`);
         lines.push(`${ind}  sortable: true,`);
         lines.push(`${ind}  addButton: false,`);
