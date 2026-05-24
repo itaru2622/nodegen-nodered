@@ -239,7 +239,7 @@ function genFieldRow(operationId: string, field: FieldDef): string {
 
 function genRegistration(nodeName: string, nodeDef: NodeDef, color: string, icon: string, category: string): string {
   const defaults = genDefaults(nodeName, nodeDef);
-  const typedInputInits = genTypedInputInits(nodeDef.endpoints);
+  const typedInputInits = genWidgetInits(nodeDef.endpoints);
 
   return [
     `  RED.nodes.registerType('${nodeName}', {`,
@@ -364,7 +364,7 @@ function genDefaults(nodeName: string, nodeDef: NodeDef): string {
 // typedInput initialization calls (inside oneditprepare)
 // ============================================================
 
-function genTypedInputInits(endpoints: EndpointDef[]): string {
+function genWidgetInits(endpoints: EndpointDef[]): string {
   const lines: string[] = [];
   const ind = '      ';
 
@@ -375,16 +375,21 @@ function genTypedInputInits(endpoints: EndpointDef[]): string {
       const key     = fieldPropKey(ep.operationId, f.name);
       const keyType = fieldTypePropKey(ep.operationId, f.name);
 
+      // additionalProperties field: handles (1)(2)(3) all in this block, then skips the standard path via continue.
       if (f.isAdditionalProperties) {
-        const valTypes = apValueTypes(f.type);
+        // (1) Salvage saved value (must run before (2) typedInput init, which wipes input.value when hasValue:false)
         lines.push(`${ind}var _${key}_rawJson = $('#node-input-${key}').val() || '{}';`);
+        // (2) typedInput init (outer map / msg / flow widget)
         lines.push(`${ind}$('#node-input-${key}').typedInput({`);
         lines.push(`${ind}  typeField: '#node-input-${keyType}',`);
-        lines.push(`${ind}  types: [{ value: 'map', label: 'map', icon: 'fa fa-table', hasValue: false }, 'msg', 'flow', 'global', 'env'],`);
+        lines.push(`${ind}  types: ${typedInputTypes('additional-properties')},`);
         lines.push(`${ind}});`);
-        lines.push(`${ind}// editableList for '${f.name}' (additionalProperties)`);
+        // (3) editableList init and saved-value restore (key-value map rows UI)
         lines.push(`${ind}$('#${key}-ap-list').editableList({`);
         lines.push(`${ind}  height: 'auto',`);
+        lines.push(`${ind}  removable: true,`);
+        lines.push(`${ind}  sortable: true,`);
+        lines.push(`${ind}  addButton: false,`);
         lines.push(`${ind}  addItem: function(container, i, opt) {`);
         if (f.type === 'array-of-string') {
           // Value is an array: render a mini editableList inside each AP row
@@ -401,13 +406,15 @@ function genTypedInputInits(endpoints: EndpointDef[]): string {
           lines.push(`${ind}    container.append(row);`);
           lines.push(`${ind}    valList.editableList({`);
           lines.push(`${ind}      height: 'auto',`);
+          lines.push(`${ind}      removable: true,`);
+          lines.push(`${ind}      sortable: true,`);
+          lines.push(`${ind}      addButton: false,`);
           lines.push(`${ind}      addItem: function(c, i2, v) {`);
           lines.push(`${ind}        var inp = $('<input>', { type: 'text', style: 'width:100%', 'class': 'aoi-val' });`);
           lines.push(`${ind}        c.append(inp);`);
           lines.push(`${ind}        inp.typedInput({ types: ['str'] });`);
           lines.push(`${ind}        inp.typedInput('value', typeof v === 'string' ? v : '');`);
           lines.push(`${ind}      },`);
-          lines.push(`${ind}      removable: true, sortable: true, addButton: false,`);
           lines.push(`${ind}    });`);
           lines.push(`${ind}    (_varr.length > 0 ? _varr : ['']).forEach(function(v) { valList.editableList('addItem', String(v)); });`);
           lines.push(`${ind}    addLnk.on('click', function(e) { e.preventDefault(); valList.editableList('addItem', ''); });`);
@@ -422,15 +429,13 @@ function genTypedInputInits(endpoints: EndpointDef[]): string {
           lines.push(`${ind}    var valInp = $('<input>', { type: 'text', 'class': 'ap-val' });`);
           lines.push(`${ind}    row.append(keyInp).append(valInp);`);
           lines.push(`${ind}    container.append(row);`);
+          const valTypes = typedInputTypes(f.type);
           lines.push(`${ind}    valInp.typedInput({ types: ${valTypes} });`);
           lines.push(`${ind}    valInp.typedInput('value', _v);`);
           lines.push(`${ind}    // In Node-RED v4, typedInput converts the input to type=hidden and adds a sibling div.red-ui-typedInput-container`);
           lines.push(`${ind}    valInp.next('.red-ui-typedInput-container').css({ flex: '1', minWidth: '0', width: '' });`);
           lines.push(`${ind}  },`);
         }
-        lines.push(`${ind}  removable: true,`);
-        lines.push(`${ind}  sortable: true,`);
-        lines.push(`${ind}  addButton: false,`);
         lines.push(`${ind}});`);
         lines.push(`${ind}try {`);
         lines.push(`${ind}  var _${key}_saved = JSON.parse(_${key}_rawJson);`);
@@ -453,16 +458,19 @@ function genTypedInputInits(endpoints: EndpointDef[]): string {
 
       const types   = typedInputTypes(f.type);
 
+      // (1) [array-of-string] Salvage saved value (must run before (2) typedInput init, which wipes input.value when hasValue:false)
       if (f.type === 'array-of-string') {
-        // Read saved JSON BEFORE typedInput init: typedInput with hasValue:false clears the input value on init
         lines.push(`${ind}var _${key}_rawJson = $('#node-input-${key}').val() || '[]';`);
       }
 
+      // (2) typedInput init (common to all fields)
       lines.push(`${ind}$('#node-input-${key}').typedInput({`);
       lines.push(`${ind}  typeField: '#node-input-${keyType}',`);
       lines.push(`${ind}  types: ${types},`);
       lines.push(`${ind}});`);
 
+      // (3) [array-of-string] editableList init and saved-value restore.
+      //    Must run after (2) because addItem callbacks use typedInput internally.
       if (f.type === 'array-of-string') {
         lines.push(`${ind}// editableList for '${f.name}'`);
         lines.push(`${ind}$('#${key}-list').editableList({`);
@@ -500,24 +508,35 @@ function genTypedInputInits(endpoints: EndpointDef[]): string {
   return lines.join('\n');
 }
 
+/**
+ * Maps OpenAPI schema type definitions to Node-RED TypedInput widget configurations.
+ *
+ * TypedInput types serve two purposes:
+ *   - How the user directly inputs a value (str / num / bool / list / map, etc.) — determined by schema type
+ *   - Where the value comes from at runtime (msg / flow / global / env) — provided universally for all types
+ *
+ * Centralizing here ensures FieldType additions/changes require only one edit location.
+ * Do NOT create a separate function for similar purposes
+ * (previously split into apValueTypes, now merged).
+ *
+ * cf. `defaultTypeStr()` in utils.ts — handles the same FieldType mapping but for
+ *     generating initial type strings in the defaults object; kept separate due to
+ *     different responsibilities.
+ *
+ * @param fieldType FieldType value (e.g. 'string', 'number', 'array-of-string').
+ * @returns TypedInput types array literal string for use in `typedInput({ types: ... })`.
+ */
 function typedInputTypes(fieldType: string): string {
   switch (fieldType) {
     case 'number':          return "['num', 'msg', 'flow', 'global', 'env']";
     case 'boolean':         return "['bool', 'msg', 'flow', 'global', 'env']";
-    case 'array-of-string': return "[{ value: 'list', label: 'list', icon: 'fa fa-list', hasValue: false }, 'msg', 'flow']";
+    case 'string':          return "['str', 'msg', 'flow', 'global', 'env']";
     case 'binary':
       return "[{ value: 'str', label: 'file path', icon: 'fa fa-file' }, 'msg', 'flow', 'global', 'env']";
+    case 'array-of-string': return "[{ value: 'list', label: 'list', icon: 'fa fa-list', hasValue: false }, 'msg', 'flow']";
+    case 'additional-properties':
+      return "[{ value: 'map', label: 'map', icon: 'fa fa-table', hasValue: false }, 'msg', 'flow', 'global', 'env']";
     default:
-      return "['str', 'msg', 'flow', 'global', 'env']";
-  }
-}
-
-/** TypedInput types for each value cell inside an additionalProperties editableList row */
-function apValueTypes(fieldType: string): string {
-  switch (fieldType) {
-    case 'number':  return "['num', 'msg', 'flow']";
-    case 'boolean': return "['bool', 'msg', 'flow']";
-    case 'string':  return "['str', 'msg', 'flow']";
-    default:        return "['str', 'num', 'bool', 'json', 'msg', 'flow']";
+      return "['str', 'num', 'bool', 'json', 'msg', 'flow', 'global', 'env']";
   }
 }
