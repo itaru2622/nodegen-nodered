@@ -30,5 +30,14 @@ export function generate(nodeDef: NodeDef, opts: CliOptions): string {
     console.log(`  written: ${filePath}`);
   }
 
+  // Copy icon file to icons/ directory
+  if (opts.icon) {
+    const iconsDir = path.join(outputDir, 'icons');
+    fs.mkdirSync(iconsDir, { recursive: true });
+    const iconDst = path.join(iconsDir, path.basename(opts.icon));
+    fs.copyFileSync(path.resolve(opts.icon), iconDst);
+    console.log(`  written: ${iconDst}`);
+  }
+
   return outputDir;
 }
