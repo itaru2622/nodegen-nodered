@@ -154,7 +154,7 @@ function genEndpointBlock(ep: EndpointDef): string {
     const key = fieldPropKey(ep.operationId, f.name);
     const keyType = fieldTypePropKey(ep.operationId, f.name);
     if (f.type === 'array-of-string') {
-      lines.push(...genResolveArrayOfString(key, keyType, key, ind));
+      lines.push(...genResolveTypedInput(key, keyType, key, ind));
       lines.push(`${ind}if (_${key} !== undefined && _${key} !== null) params['${f.name}'] = _${key};`);
     } else {
       lines.push(`${ind}const _${key} = RED.util.evaluateNodeProperty(config['${key}'], config['${keyType}'] || 'str', node, msg);`);
@@ -185,17 +185,26 @@ function genEndpointBlock(ep: EndpointDef): string {
 }
 
 // ============================================================
-// Helper: resolve an array-of-string field into `let _${varSuffix}`
-// - 'list' mode: JSON.parse from config
-// - 'msg'/'flow' mode: evaluateNodeProperty
+// Helper: resolve typedInput field(s) into `let _${varSuffix}`.
+// All typedInput modes are handled here via evaluateNodeProperty:
+// - 'list' mode      : config[key] is [{t,v},...]; each item is evaluated individually
+// - 'msg'/'flow'/... : a single evaluateNodeProperty call resolves the value from context
+//   (this covers all other typedInput modes: str, num, bool, msg, flow, global, env, etc.)
 // ============================================================
 
-function genResolveArrayOfString(key: string, keyType: string, varSuffix: string, ind: string): string[] {
+function genResolveTypedInput(key: string, keyType: string, varSuffix: string, ind: string): string[] {
   return [
     `${ind}const _${varSuffix}_t = config['${keyType}'] || 'list';`,
     `${ind}let _${varSuffix};`,
     `${ind}if (_${varSuffix}_t === 'list') {`,
-    `${ind}  try { _${varSuffix} = JSON.parse(config['${key}'] || '[]'); } catch(e) { _${varSuffix} = []; }`,
+    `${ind}  try {`,
+    `${ind}    const _${varSuffix}_raw = JSON.parse(config['${key}'] || '[]');`,
+    `${ind}    _${varSuffix} = Array.isArray(_${varSuffix}_raw) ? _${varSuffix}_raw.map(function(item) {`,
+    `${ind}      return (item && typeof item === 'object' && !Array.isArray(item))`,
+    `${ind}        ? RED.util.evaluateNodeProperty(item.v, item.t || 'str', node, msg)`,
+    `${ind}        : item;`,
+    `${ind}    }) : [];`,
+    `${ind}  } catch(e) { _${varSuffix} = []; }`,
     `${ind}} else {`,
     `${ind}  _${varSuffix} = RED.util.evaluateNodeProperty(config['${key}'], _${varSuffix}_t, node, msg);`,
     `${ind}}`,
@@ -215,7 +224,7 @@ function genJsonBody(operationId: string, fields: FieldDef[], ind: string): stri
       lines.push(`${ind}_body['${f.name}'] = config['${key}'];`);
     } else if (f.type === 'array-of-string') {
       const keyType = fieldTypePropKey(operationId, f.name);
-      lines.push(...genResolveArrayOfString(key, keyType, key, ind));
+      lines.push(...genResolveTypedInput(key, keyType, key, ind));
       lines.push(`${ind}_body['${f.name}'] = _${key};`);
     } else {
       const keyType = fieldTypePropKey(operationId, f.name);
@@ -278,7 +287,7 @@ function genMultipartBody(operationId: string, fields: FieldDef[], ind: string):
       lines.push(`${ind}}`);
     } else if (f.type === 'array-of-string') {
       const keyType = fieldTypePropKey(operationId, f.name);
-      lines.push(...genResolveArrayOfString(key, keyType, key, ind));
+      lines.push(...genResolveTypedInput(key, keyType, key, ind));
       lines.push(`${ind}if (Array.isArray(_${key})) { _${key}.forEach(function(item) { _fd.append('${f.name}', String(item)); }); }`);
     } else {
       const keyType = fieldTypePropKey(operationId, f.name);
