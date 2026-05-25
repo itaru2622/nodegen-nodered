@@ -1,3 +1,4 @@
+import path from 'node:path';
 import type { NodeDef, EndpointDef, FieldDef, SecurityDef, CliOptions } from './types';
 import { fieldPropKey, fieldTypePropKey, defaultTypeStr } from './utils';
 
@@ -70,7 +71,7 @@ function genAuthConfigHtml(nodeName: string, security: SecurityDef[]): string {
 
 function genMainNodeHtml(nodeName: string, nodeDef: NodeDef, opts: CliOptions): string {
   const color = opts.color ? `#${opts.color}` : '#87A980';
-  const icon  = opts.icon  ? opts.icon        : 'font-awesome/fa-cloud';
+  const icon  = opts.icon  ? path.basename(opts.icon) : 'font-awesome/fa-cloud';
 
   // Collect all binary fields across all endpoints (deduplicate by field name)
   const binaryFields = [
