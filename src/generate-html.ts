@@ -309,8 +309,9 @@ function genRegistration(nodeName: string, nodeDef: NodeDef, color: string, icon
     `        if ($('#node-input-' + forKey + 'Type').val() !== 'list') return;`,
     `        var items = [];`,
     `        $(this).find('ol').editableList('items').each(function() {`,
-    `          var v = $(this).find('.aoi-val').typedInput('value');`,
-    `          if (v !== undefined && v !== null && String(v).trim() !== '') items.push(String(v).trim());`,
+    `          var _vt = $(this).find('.aoi-val').typedInput('type');`,
+    `          var _vv = $(this).find('.aoi-val').typedInput('value');`,
+    `          if (_vv !== undefined && _vv !== null && String(_vv).trim() !== '') items.push({ t: _vt, v: _vv });`,
     `        });`,
     `        var _el = document.getElementById('node-input-' + forKey);`,
     `        if (_el) _el.value = JSON.stringify(items);`,
@@ -326,12 +327,15 @@ function genRegistration(nodeName: string, nodeDef: NodeDef, color: string, icon
     `          if (subList.length > 0) {`,
     `            var arr = [];`,
     `            subList.editableList('items').each(function() {`,
-    `              var sv = $(this).find('.aoi-val').typedInput('value');`,
-    `              if (sv !== undefined && sv !== null && String(sv).trim() !== '') arr.push(String(sv).trim());`,
+    `              var _svt = $(this).find('.aoi-val').typedInput('type');`,
+    `              var _svv = $(this).find('.aoi-val').typedInput('value');`,
+    `              if (_svv !== undefined && _svv !== null && String(_svv).trim() !== '') arr.push({ t: _svt, v: _svv });`,
     `            });`,
     `            v = arr;`,
     `          } else {`,
-    `            v = $(this).find('.ap-val').typedInput('value');`,
+    `            var _valT = $(this).find('.ap-val').typedInput('type');`,
+    `            var _valV = $(this).find('.ap-val').typedInput('value');`,
+    `            v = { t: _valT, v: _valV };`,
     `          }`,
     `          if (k !== '') obj[k] = v;`,
     `        });`,
@@ -434,19 +438,25 @@ function genWidgetInits(endpoints: EndpointDef[]): string {
           lines.push(`${ind}      sortable: true,`);
           lines.push(`${ind}      addButton: false,`);
           lines.push(`${ind}      addItem: function(c, i2, v) {`);
+          lines.push(`${ind}        var _vObj = (v !== null && typeof v === 'object' && !Array.isArray(v)) ? v : null;`);
+          lines.push(`${ind}        var _vt = _vObj ? String(_vObj.t || 'str') : 'str';`);
+          lines.push(`${ind}        var _vv = _vObj ? String(_vObj.v !== undefined ? _vObj.v : '') : String(v || '');`);
           lines.push(`${ind}        var inp = $('<input>', { type: 'text', style: 'width:100%', 'class': 'aoi-val' });`);
           lines.push(`${ind}        c.append(inp);`);
-          lines.push(`${ind}        inp.typedInput({ types: ['str'] });`);
-          lines.push(`${ind}        inp.typedInput('value', typeof v === 'string' ? v : '');`);
+          lines.push(`${ind}        inp.typedInput({ types: ${typedInputTypes('string')} });`);
+          lines.push(`${ind}        inp.typedInput('type', _vt);`);
+          lines.push(`${ind}        inp.typedInput('value', _vv);`);
           lines.push(`${ind}      },`);
           lines.push(`${ind}    });`);
-          lines.push(`${ind}    (_varr.length > 0 ? _varr : ['']).forEach(function(v) { valList.editableList('addItem', String(v)); });`);
-          lines.push(`${ind}    addLnk.on('click', function(e) { e.preventDefault(); valList.editableList('addItem', ''); });`);
+          lines.push(`${ind}    (_varr.length > 0 ? _varr : [{ t: 'str', v: '' }]).forEach(function(v) { valList.editableList('addItem', v); });`);
+          lines.push(`${ind}    addLnk.on('click', function(e) { e.preventDefault(); valList.editableList('addItem', { t: 'str', v: '' }); });`);
           lines.push(`${ind}  },`);
         } else {
           // Value is a scalar: use typedInput
           lines.push(`${ind}    var _k = (opt && opt.k !== undefined) ? String(opt.k) : '';`);
-          lines.push(`${ind}    var _v = (opt && opt.v !== undefined) ? String(opt.v) : '';`);
+          lines.push(`${ind}    var _vObj = (opt && opt.v !== null && typeof opt.v === 'object' && !Array.isArray(opt.v)) ? opt.v : null;`);
+          lines.push(`${ind}    var _vt = _vObj ? String(_vObj.t || 'str') : 'str';`);
+          lines.push(`${ind}    var _vv = _vObj ? String(_vObj.v !== undefined ? _vObj.v : '') : '';`);
           lines.push(`${ind}    var row = $('<div>').css({ display: 'flex', gap: '4px', alignItems: 'center', width: '100%' });`);
           lines.push(`${ind}    var keyInp = $('<input>', { type: 'text', placeholder: 'key', 'class': 'ap-key' }).css({ width: '35%', flex: 'none' });`);
           lines.push(`${ind}    keyInp.val(_k);`);
@@ -455,7 +465,8 @@ function genWidgetInits(endpoints: EndpointDef[]): string {
           lines.push(`${ind}    container.append(row);`);
           const valTypes = typedInputTypes(f.type);
           lines.push(`${ind}    valInp.typedInput({ types: ${valTypes} });`);
-          lines.push(`${ind}    valInp.typedInput('value', _v);`);
+          lines.push(`${ind}    valInp.typedInput('type', _vt);`);
+          lines.push(`${ind}    valInp.typedInput('value', _vv);`);
           lines.push(`${ind}    // In Node-RED v4, typedInput converts the input to type=hidden and adds a sibling div.red-ui-typedInput-container`);
           lines.push(`${ind}    valInp.next('.red-ui-typedInput-container').css({ flex: '1', minWidth: '0', width: '' });`);
           lines.push(`${ind}  },`);
@@ -500,11 +511,14 @@ function genWidgetInits(endpoints: EndpointDef[]): string {
         lines.push(`${ind}$('#${key}-list').editableList({`);
         lines.push(`${ind}  height: 'auto',`);
         lines.push(`${ind}  addItem: function(container, i, opt) {`);
-        lines.push(`${ind}    var val = typeof opt === 'string' ? opt : '';`);
+        lines.push(`${ind}    var _vObj = (opt !== null && typeof opt === 'object' && !Array.isArray(opt)) ? opt : null;`);
+        lines.push(`${ind}    var _vt = _vObj ? String(_vObj.t || 'str') : 'str';`);
+        lines.push(`${ind}    var _vv = _vObj ? String(_vObj.v !== undefined ? _vObj.v : '') : String(opt || '');`);
         lines.push(`${ind}    var inp = $('<input/>', { type: 'text', style: 'width:100%', 'class': 'aoi-val' });`);
         lines.push(`${ind}    container.append(inp);`);
-        lines.push(`${ind}    inp.typedInput({ types: ['str'] });`);
-        lines.push(`${ind}    inp.typedInput('value', val);`);
+        lines.push(`${ind}    inp.typedInput({ types: ${typedInputTypes('string')} });`);
+        lines.push(`${ind}    inp.typedInput('type', _vt);`);
+        lines.push(`${ind}    inp.typedInput('value', _vv);`);
         lines.push(`${ind}  },`);
         lines.push(`${ind}  removable:  true,`);
         lines.push(`${ind}  sortable:   true,`);
@@ -513,10 +527,10 @@ function genWidgetInits(endpoints: EndpointDef[]): string {
         lines.push(`${ind}try {`);
         lines.push(`${ind}  var _${key}_saved = JSON.parse(_${key}_rawJson);`);
         lines.push(`${ind}  var _${key}_items = Array.isArray(_${key}_saved) ? _${key}_saved : [];`);
-        lines.push(`${ind}  if (_${key}_items.length === 0) _${key}_items = [''];`);
+        lines.push(`${ind}  if (_${key}_items.length === 0) _${key}_items = [{ t: 'str', v: '' }];`);
         lines.push(`${ind}  _${key}_items.forEach(function(item) { $('#${key}-list').editableList('addItem', item); });`);
-        lines.push(`${ind}} catch(e) { $('#${key}-list').editableList('addItem', ''); }`);
-        lines.push(`${ind}$('#${key}-list-add').on('click', function(e) { e.preventDefault(); $('#${key}-list').editableList('addItem', ''); });`);
+        lines.push(`${ind}} catch(e) { $('#${key}-list').editableList('addItem', { t: 'str', v: '' }); }`);
+        lines.push(`${ind}$('#${key}-list-add').on('click', function(e) { e.preventDefault(); $('#${key}-list').editableList('addItem', { t: 'str', v: '' }); });`);
         lines.push(`${ind}function _${key}_refreshList() {`);
         lines.push(`${ind}  var t = $('#node-input-${keyType}').val() || 'list';`);
         lines.push(`${ind}  var fieldVisible = $('#node-input-${key}').closest('.ep-field-row').is(':visible');`);
