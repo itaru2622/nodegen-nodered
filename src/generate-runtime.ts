@@ -154,7 +154,7 @@ function genEndpointBlock(ep: EndpointDef): string {
     const key = fieldPropKey(ep.operationId, f.name);
     const keyType = fieldTypePropKey(ep.operationId, f.name);
     if (f.type === 'array-of-string') {
-      lines.push(...genResolveTypedInput(key, keyType, key, ind));
+      lines.push(...genResolveTypedInput(key, keyType, key, ind, 'list'));
       lines.push(`${ind}if (_${key} !== undefined && _${key} !== null) params['${f.name}'] = _${key};`);
     } else {
       lines.push(`${ind}const _${key} = RED.util.evaluateNodeProperty(config['${key}'], config['${keyType}'] || 'str', node, msg);`);
@@ -187,14 +187,16 @@ function genEndpointBlock(ep: EndpointDef): string {
 // ============================================================
 // Helper: resolve typedInput field(s) into `let _${varSuffix}`.
 // All typedInput modes are handled here via evaluateNodeProperty:
-// - 'list' mode      : config[key] is [{t,v},...]; each item is evaluated individually
-// - 'msg'/'flow'/... : a single evaluateNodeProperty call resolves the value from context
-//   (this covers all other typedInput modes: str, num, bool, msg, flow, global, env, etc.)
+// - 'list' mode : config[key] is [{t,v},...]; each item is evaluated individually → result is an array
+// - 'map'  mode : config[key] is {"k":{t,v},...} or {"k":[{t,v},...]};  each entry is evaluated → result is an object
+// - any other mode (str/num/msg/flow/global/env/...): evaluateNodeProperty resolves the value directly
+// defaultMode: fallback used when config[keyType] is absent (consideration for version-up migration).
+//              Pass 'list' for array-of-string fields, 'map' for additionalProperties.
 // ============================================================
 
-function genResolveTypedInput(key: string, keyType: string, varSuffix: string, ind: string): string[] {
+function genResolveTypedInput(key: string, keyType: string, varSuffix: string, ind: string, defaultMode: 'list' | 'map'): string[] {
   return [
-    `${ind}const _${varSuffix}_t = config['${keyType}'] || 'list';`,
+    `${ind}const _${varSuffix}_t = config['${keyType}'] || '${defaultMode}';`,
     `${ind}let _${varSuffix};`,
     `${ind}if (_${varSuffix}_t === 'list') {`,
     `${ind}  try {`,
@@ -205,6 +207,25 @@ function genResolveTypedInput(key: string, keyType: string, varSuffix: string, i
     `${ind}        : item;`,
     `${ind}    }) : [];`,
     `${ind}  } catch(e) { _${varSuffix} = []; }`,
+    `${ind}} else if (_${varSuffix}_t === 'map') {`,
+    `${ind}  try {`,
+    `${ind}    const _${varSuffix}_raw = JSON.parse(config['${key}'] || '{}');`,
+    `${ind}    _${varSuffix} = {};`,
+    `${ind}    Object.keys(_${varSuffix}_raw).forEach(function(k) {`,
+    `${ind}      var entry = _${varSuffix}_raw[k];`,
+    `${ind}      if (Array.isArray(entry)) {`,
+    `${ind}        _${varSuffix}[k] = entry.map(function(item) {`,
+    `${ind}          return (item && typeof item === 'object' && !Array.isArray(item))`,
+    `${ind}            ? RED.util.evaluateNodeProperty(item.v, item.t || 'str', node, msg)`,
+    `${ind}            : item;`,
+    `${ind}        });`,
+    `${ind}      } else if (entry && typeof entry === 'object') {`,
+    `${ind}        _${varSuffix}[k] = RED.util.evaluateNodeProperty(entry.v, entry.t || 'str', node, msg);`,
+    `${ind}      } else {`,
+    `${ind}        _${varSuffix}[k] = entry;`,
+    `${ind}      }`,
+    `${ind}    });`,
+    `${ind}  } catch(e) { _${varSuffix} = {}; }`,
     `${ind}} else {`,
     `${ind}  _${varSuffix} = RED.util.evaluateNodeProperty(config['${key}'], _${varSuffix}_t, node, msg);`,
     `${ind}}`,
@@ -222,9 +243,13 @@ function genJsonBody(operationId: string, fields: FieldDef[], ind: string): stri
     const key = fieldPropKey(operationId, f.name);
     if (f.type === 'enum') {
       lines.push(`${ind}_body['${f.name}'] = config['${key}'];`);
+    } else if (f.isAdditionalProperties) {
+      const keyType = fieldTypePropKey(operationId, f.name);
+      lines.push(...genResolveTypedInput(key, keyType, key, ind, 'map'));
+      lines.push(`${ind}Object.assign(_body, _${key});`);
     } else if (f.type === 'array-of-string') {
       const keyType = fieldTypePropKey(operationId, f.name);
-      lines.push(...genResolveTypedInput(key, keyType, key, ind));
+      lines.push(...genResolveTypedInput(key, keyType, key, ind, 'list'));
       lines.push(`${ind}_body['${f.name}'] = _${key};`);
     } else {
       const keyType = fieldTypePropKey(operationId, f.name);
@@ -285,9 +310,17 @@ function genMultipartBody(operationId: string, fields: FieldDef[], ind: string):
       lines.push(`${ind}    _fd.append('${f.name}', _${key}, { filename: 'upload', contentType: 'application/octet-stream' });`);
       lines.push(`${ind}  }`);
       lines.push(`${ind}}`);
+    } else if (f.isAdditionalProperties) {
+      const keyType = fieldTypePropKey(operationId, f.name);
+      lines.push(...genResolveTypedInput(key, keyType, key, ind, 'map'));
+      lines.push(`${ind}Object.keys(_${key} || {}).forEach(function(k) {`);
+      lines.push(`${ind}  var _apv = _${key}[k];`);
+      lines.push(`${ind}  if (Array.isArray(_apv)) { _apv.forEach(function(item) { _fd.append(k, String(item)); }); }`);
+      lines.push(`${ind}  else if (_apv !== undefined && _apv !== null && String(_apv) !== '') { _fd.append(k, String(_apv)); }`);
+      lines.push(`${ind}});`);
     } else if (f.type === 'array-of-string') {
       const keyType = fieldTypePropKey(operationId, f.name);
-      lines.push(...genResolveTypedInput(key, keyType, key, ind));
+      lines.push(...genResolveTypedInput(key, keyType, key, ind, 'list'));
       lines.push(`${ind}if (Array.isArray(_${key})) { _${key}.forEach(function(item) { _fd.append('${f.name}', String(item)); }); }`);
     } else {
       const keyType = fieldTypePropKey(operationId, f.name);
