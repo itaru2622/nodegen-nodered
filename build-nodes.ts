@@ -11,7 +11,10 @@ import type { CliOptions } from './src/types';
 
 function printUsage() {
   console.log(`
-Usage: tsx build-nodes.ts <spec.yaml> [options]
+Usage: nodegen-nodered <source file or URL> [options]
+
+Supported source:
+ - OpenAPI document v3.0.x in json / yaml
 
 Options:
   -o <dir>          Output directory (default: current directory)
@@ -21,7 +24,7 @@ Options:
   --version <str>   Version (e.g. "1.0.0")
   --keywords <str>  Additional keywords (comma-separated)
   --category <str>  Node category (default: "function")
-  --icon <file>     Icon PNG file
+  --icon <file>     Icon file in PNG or SVG (PNG geometry size: 40x60)
   --color <str>     Node color (e.g. "A6BBCF")
   --tgz             Package as .tgz (npm pack)
   --help            Show this help
@@ -71,7 +74,7 @@ function parseArgs(): CliOptions {
 
 async function main() {
   const opts = parseArgs();
-  const specPath = path.resolve(opts.spec);
+  const specPath = opts.spec
 
   console.log(`\n[1] Loading spec: ${specPath}`);
   const nodeDef = await parseSpec(specPath);
