@@ -33,13 +33,13 @@ import type { NodeDef, EndpointDef, FieldDef, FieldType, SecurityDef } from './t
  */
 
 /**
- * Generates the NodeDef by parsing and transforming an OpenAPI 3.x spec file.
+ * Entry point:  parse an OpenAPI 3.x spec file and re-pack results into NodeDef for futher processing.
  *
- * Uses SwaggerParser.dereference (not just parse) so all $ref references are resolved
- * inline before traversal — this simplifies downstream code by eliminating reference handling.
+ * Uses SwaggerParser.dereference so all $ref references are resolved and makes it simple
+ * for downstream code on eliminating reference handling.
  * Uses the first server URL as the base URL for all endpoints.
  *
- * @param specPath Path to the OpenAPI spec file (.yaml or .json).
+ * @param specPath Path or URL to the OpenAPI spec file (.yaml or .json).
  * @returns NodeDef consumed by generateHtml() and generateRuntime().
  */
 export async function parseSpec(specPath: string): Promise<NodeDef> {
