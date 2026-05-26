@@ -23,6 +23,7 @@ Options:
   --category <str>  Node category (default: "function")
   --icon <file>     Icon PNG file
   --color <str>     Node color (e.g. "A6BBCF")
+  --tgz             Package as .tgz (npm pack)
   --help            Show this help
 `);
 }
@@ -30,7 +31,7 @@ Options:
 function parseArgs(): CliOptions {
   const argv = minimist(process.argv.slice(2), {
     string: ['o', 'prefix', 'name', 'module', 'version', 'keywords', 'category', 'icon', 'color'],
-    boolean: ['help'],
+    boolean: ['help', 'tgz'],
     alias: { o: 'output', h: 'help' },
     default: {
       prefix: 'node-red-contrib-',
@@ -60,6 +61,7 @@ function parseArgs(): CliOptions {
     category: argv.category as string,
     icon: argv.icon as string | undefined,
     color: argv.color as string | undefined,
+    tgz: argv.tgz as boolean | undefined,
   };
 }
 
