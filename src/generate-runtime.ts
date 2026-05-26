@@ -1,10 +1,27 @@
 import type { NodeDef, EndpointDef, FieldDef, SecurityDef } from './types';
 import { toPascalCase, fieldPropKey, fieldTypePropKey, defaultTypeStr } from './utils';
 
-// ============================================================
-// Generate the Node-RED runtime .js file
-// ============================================================
+/**
+ * Generates node.js for a Node-RED custom node (the runtime CommonJS module).
+ *
+ * The generated file exports `module.exports = function(RED) { ... }` that registers
+ * two Node-RED types:
+ *   - Auth config node (`${nodeName}-auth-config`): stores the API key credential.
+ *   - Main node (`${nodeName}`): on each incoming message, resolves field values,
+ *     applies auth, and dispatches the HTTP request via axios.
+ *
+ * Field value resolution mirrors the TypedInput modes stored by the editor:
+ *   - 'list' / 'map' mode  → genResolveTypedInput() deserializes stored JSON.
+ *   - other modes          → RED.util.evaluateNodeProperty() resolves directly.
+ */
 
+/**
+ * Entry point: generate whole contents for node-RED node.js
+ *
+ * @param nodeDef  Parsed node definition from the OpenAPI spec.
+ * @param nodeName Node name used as the registered type name.
+ * @returns Complete .js file content as a string (CommonJS module).
+ */
 export function generateRuntime(nodeDef: NodeDef, nodeName: string): string {
   const Pascal = toPascalCase(nodeName);
   return [
@@ -26,10 +43,20 @@ export function generateRuntime(nodeDef: NodeDef, nodeName: string): string {
   ].join('\n');
 }
 
-// ============================================================
-// Auth Config Node
-// ============================================================
-
+/**
+ * Generates the auth config node — a dedicated config node that keeps API credentials
+ * separate from the main node, enabling sharing across instances and Node-RED's
+ * encrypted credential storage.
+ *
+ * The auth config node only stores credentials and has no `input` handler.
+ * Credentials are declared as `{ apiKey: { type: 'password' } }` so Node-RED
+ * encrypts them in storage.
+ *
+ * @param nodeName Node name (used to build the config node type `${nodeName}-auth-config`).
+ * @param Pascal   PascalCase version of nodeName for the constructor function name.
+ * @param security Security scheme definitions (not used in the generated code; reserved for future use).
+ * @returns JS string for the auth config node constructor and registerType call.
+ */
 function genAuthConfigNode(nodeName: string, Pascal: string, security: SecurityDef[]): string {
   const lines: string[] = [];
   lines.push(`  // ----- Auth Config Node -----`);
@@ -42,10 +69,22 @@ function genAuthConfigNode(nodeName: string, Pascal: string, security: SecurityD
   return lines.join('\n');
 }
 
-// ============================================================
-// Main Node
-// ============================================================
-
+/**
+ * Generates the main API-caller node: receives incoming Node-RED messages, reads
+ * the user-configured endpoint and field values from config, executes the API call,
+ * and forwards the response to the next node.
+ *
+ * On each incoming message the handler executes in this order:
+ *   1. Reads `config.endpoint` (operationId) and resolves the linked auth config node.
+ *   2. Applies the API key to headers or query params via genAuthBlock.
+ *   3. Sets `method`, `url`, `requestData`, `params`, and `headers` via genEndpointSwitch.
+ *   4. Executes the HTTP request and forwards the response via genAxiosCall.
+ *
+ * @param nodeName Node name used as the registered type name.
+ * @param Pascal   PascalCase version of nodeName for the constructor function name.
+ * @param nodeDef  Parsed node definition supplying security, server URL, and endpoints.
+ * @returns JS string for the main node constructor and registerType call.
+ */
 function genMainNode(nodeName: string, Pascal: string, nodeDef: NodeDef): string {
   const lines: string[] = [];
   lines.push(`  // ----- Main Node -----`);
@@ -57,8 +96,7 @@ function genMainNode(nodeName: string, Pascal: string, nodeDef: NodeDef): string
   lines.push(`      const authNode = RED.nodes.getNode(config.authConfig);`);
   lines.push(`      const endpoint = config.endpoint;`);
   lines.push(`      const baseUrl  = '${nodeDef.serverUrl}';`);
-  lines.push(``);
-  lines.push(`      let method, url, requestData;`);
+  lines.push(``);  // `let` (not `const`): these three are assigned inside the endpoint switch branches.  lines.push(`      let method, url, requestData;`);
   lines.push(`      const params  = {};`);
   lines.push(`      const headers = {};`);
   lines.push(``);
@@ -74,10 +112,19 @@ function genMainNode(nodeName: string, Pascal: string, nodeDef: NodeDef): string
   return lines.join('\n');
 }
 
-// ============================================================
-// Auth block: apply API key to header or query
-// ============================================================
-
+/**
+ * Generates the API key injection block that applies the credential from the linked
+ * auth config node to the outgoing request (header or query param, depending on the
+ * security scheme).
+ *
+ * If no security schemes are defined, emits a no-op comment.
+ * When both header and query schemes coexist, the generated code branches at runtime on
+ * `authNode.scheme` — this mirrors the scheme `<select>` in the editor UI that is rendered
+ * by genAuthConfigHtml when `security.length > 1`.
+ *
+ * @param security Security scheme definitions from the OpenAPI spec.
+ * @returns JS string for the API key injection block.
+ */
 function genAuthBlock(security: SecurityDef[]): string {
   if (security.length === 0) return `      // No security schemes defined.`;
 
@@ -89,6 +136,7 @@ function genAuthBlock(security: SecurityDef[]): string {
   lines.push(`      if (authNode && authNode.credentials && authNode.credentials.apiKey) {`);
   lines.push(`        const apiKey = authNode.credentials.apiKey;`);
 
+  // If query schemes exist, emit a runtime branch on authNode.scheme; otherwise a direct header assignment.
   if (querySchemes.length > 0) {
     lines.push(`        if (authNode.scheme === '${querySchemes[0].name}') {`);
     lines.push(`          params['${querySchemes[0].keyName}'] = apiKey;`);
@@ -105,10 +153,17 @@ function genAuthBlock(security: SecurityDef[]): string {
   return lines.join('\n');
 }
 
-// ============================================================
-// Endpoint switch block
-// ============================================================
-
+/**
+ * Generates the endpoint parameter extraction block covering all defined APIs: for
+ * each endpoint, reads field values from the editor config and assembles
+ * method/url/requestData/params/headers ready for the axios call.
+ * Delegates per-endpoint extraction to genEndpointBlock.
+ *
+ * An unrecognized endpoint (not in the OpenAPI spec) calls `done(new Error(...))` and returns early.
+ *
+ * @param endpoints List of endpoint definitions from the parsed OpenAPI spec.
+ * @returns JS string for the full endpoint dispatch block.
+ */
 function genEndpointSwitch(endpoints: EndpointDef[]): string {
   const lines: string[] = [];
   endpoints.forEach((ep, i) => {
@@ -123,6 +178,24 @@ function genEndpointSwitch(endpoints: EndpointDef[]): string {
   return lines.join('\n');
 }
 
+/**
+ * Generates one endpoint's parameter extraction block, used as a helper by genEndpointSwitch.
+ * Reads each field value from the editor config, resolves it via typedInput evaluation,
+ * and assigns it to the appropriate request target (path, header, query param, or body).
+ *
+ * Fields are resolved by their `location` property in this order:
+ *   1. path   — substituted into the URL template via `encodeURIComponent`.
+ *   2. header — added to `headers` if the resolved value is non-empty.
+ *   3. query  — added to `params`; array-of-string uses genResolveTypedInput ('list' mode).
+ *   4. body   — routed to genMultipartBody, genRawBody, or genJsonBody based on
+ *               `ep.contentType` and the field types present.
+ *
+ * cf. `genResolveTypedInput()` — handles list/map deserialization for array-of-string
+ *     and additionalProperties fields.
+ *
+ * @param ep Endpoint definition containing method, path, fields, and contentType.
+ * @returns JS string for the endpoint branch body (no enclosing braces).
+ */
 function genEndpointBlock(ep: EndpointDef): string {
   const lines: string[] = [];
   const ind = '        '; // 8 spaces
@@ -184,16 +257,27 @@ function genEndpointBlock(ep: EndpointDef): string {
   return lines.join('\n');
 }
 
-// ============================================================
-// Helper: resolve typedInput field(s) into `let _${varSuffix}`.
-// All typedInput modes are handled here via evaluateNodeProperty:
-// - 'list' mode : config[key] is [{t,v},...]; each item is evaluated individually → result is an array
-// - 'map'  mode : config[key] is {"k":{t,v},...} or {"k":[{t,v},...]};  each entry is evaluated → result is an object
-// - any other mode (str/num/msg/flow/global/env/...): evaluateNodeProperty resolves the value directly
-// defaultMode: fallback used when config[keyType] is absent (consideration for version-up migration).
-//              Pass 'list' for array-of-string fields, 'map' for additionalProperties.
-// ============================================================
-
+/**
+ * Generates the TypedInput evaluation snippet that resolves a single field's stored
+ * value into a JS variable, handling all modes (list/map/direct). Because the editor
+ * serializes values differently per mode (list → JSON array of {t,v}; map → JSON object
+ * of {t,v}; others → value stored directly), all extractors (query params, body builders)
+ * delegate here instead of duplicating mode-dispatch logic.
+ *
+ * `defaultMode` is the fallback when `config[keyType]` is absent (nodes saved before this
+ * field type was introduced; version-up migration). Pass 'list' for array-of-string fields,
+ * 'map' for additionalProperties fields.
+ *
+ * cf. `genWidgetInits()` in generate-html.ts — serializes values into the same `{t, v}` structures
+ *     that this function reads back at runtime.
+ *
+ * @param key         Property key in `config` holding the serialized value string.
+ * @param keyType     Property key in `config` holding the TypedInput mode string.
+ * @param varSuffix   Suffix for the generated `_${varSuffix}` local variable name.
+ * @param ind         Indentation string (spaces) to prepend to each generated line.
+ * @param defaultMode Fallback TypedInput mode when `config[keyType]` is absent.
+ * @returns Array of JS statement strings (without trailing newline).
+ */
 function genResolveTypedInput(key: string, keyType: string, varSuffix: string, ind: string, defaultMode: 'list' | 'map'): string[] {
   return [
     `${ind}const _${varSuffix}_t = config['${keyType}'] || '${defaultMode}';`,
@@ -232,10 +316,23 @@ function genResolveTypedInput(key: string, keyType: string, varSuffix: string, i
   ];
 }
 
-// ============================================================
-// JSON body builder
-// ============================================================
-
+/**
+ * Generates the `application/json` request body builder that assembles and resolves
+ * all body fields from the editor config.
+ *
+ * Each field is resolved by type:
+ *   - enum                 → read directly from `config` (plain `<select>` value, no TypedInput).
+ *   - additionalProperties → genResolveTypedInput in 'map' mode; spread into body via Object.assign.
+ *   - array-of-string      → genResolveTypedInput in 'list' mode; assigned as a JS array.
+ *   - others               → RED.util.evaluateNodeProperty with the field's default TypedInput mode.
+ *
+ * Sets `requestData` to the built object and appends `Content-Type: application/json`.
+ *
+ * @param operationId Operation ID of the endpoint, used for fieldPropKey/fieldTypePropKey lookups.
+ * @param fields      Body fields for this endpoint.
+ * @param ind         Indentation string for the generated lines.
+ * @returns Array of JS statement strings.
+ */
 function genJsonBody(operationId: string, fields: FieldDef[], ind: string): string[] {
   const lines: string[] = [];
   lines.push(`${ind}const _body = {};`);
@@ -262,10 +359,21 @@ function genJsonBody(operationId: string, fields: FieldDef[], ind: string): stri
   return lines;
 }
 
-// ============================================================
-// Raw body builder (binary stream or plain string)
-// ============================================================
-
+/**
+ * Generates the raw body builder that passes a single binary or plain-string field
+ * directly as the request body, for endpoints whose entire body is one field.
+ *
+ * For binary fields: if the resolved value is a string it is treated as a file path and wrapped
+ * in `fs.createReadStream()`; a Buffer or stream is passed through directly.
+ * For other types: the resolved value is assigned to `requestData` as-is.
+ *
+ * `requestData` is set only when the resolved value is non-empty.
+ *
+ * @param operationId Operation ID of the endpoint, used for fieldPropKey/fieldTypePropKey lookups.
+ * @param field       The single body field definition.
+ * @param ind         Indentation string for the generated lines.
+ * @returns Array of JS statement strings.
+ */
 function genRawBody(operationId: string, field: FieldDef, ind: string): string[] {
   const key = fieldPropKey(operationId, field.name);
   const keyType = fieldTypePropKey(operationId, field.name);
@@ -281,10 +389,28 @@ function genRawBody(operationId: string, field: FieldDef, ind: string): string[]
   return lines;
 }
 
-// ============================================================
-// Multipart/form-data body builder
-// ============================================================
-
+/**
+ * Generates the `multipart/form-data` body builder that appends each field to a
+ * FormData object, with type-specific handling per field.
+ *
+ * Field appending strategy by type:
+ *   - enum                 → append raw config value if non-empty.
+ *   - binary               → three sub-cases (in order of precedence):
+ *                              1. string → treated as file path; `fs.createReadStream()`.
+ *                              2. `{ value: Buffer, options }` → node-red http-request compatible format.
+ *                              3. bare Buffer → appended with filename from `msg.filename` or 'upload.bin'.
+ *   - additionalProperties → genResolveTypedInput in 'map' mode; each key appended individually
+ *                             (array values expanded as repeated fields).
+ *   - array-of-string      → genResolveTypedInput in 'list' mode; each item appended as a repeated field.
+ *   - others               → evaluateNodeProperty; append as string if non-empty.
+ *
+ * Sets `requestData = _fd` and merges FormData headers into `headers` via `_fd.getHeaders()`.
+ *
+ * @param operationId Operation ID of the endpoint, used for fieldPropKey/fieldTypePropKey lookups.
+ * @param fields      Body fields for this endpoint.
+ * @param ind         Indentation string for the generated lines.
+ * @returns Array of JS statement strings.
+ */
 function genMultipartBody(operationId: string, fields: FieldDef[], ind: string): string[] {
   const lines: string[] = [];
   lines.push(`${ind}const _fd = new FormData();`);
@@ -334,10 +460,25 @@ function genMultipartBody(operationId: string, fields: FieldDef[], ind: string):
   return lines;
 }
 
-// ============================================================
-// Axios call with TLS / proxy / redirects
-// ============================================================
-
+/**
+ * Generates the axios call block that executes the HTTP request and routes the
+ * response or error back into the Node-RED flow via `send()`/`done()`.
+ *
+ * Config resolution order:
+ *   - Redirects: `config.followRedirects` / `config.maxRedirects` → `axios.maxRedirects`
+ *                (0 disables redirect following).
+ *   - TLS:       linked `tls-config` node via `config.tlsConfig`;
+ *                `_tlsNode.addTLSOptions()` populates `httpsAgent`.
+ *   - Proxy:     linked `http proxy` config node URL first; falls back to
+ *                `HTTPS_PROXY` / `HTTP_PROXY` environment variables.
+ *
+ * Response handling:
+ *   - Success:             sets `msg.payload`, `msg.statusCode`, `msg.responseHeaders`; calls send() + done().
+ *   - HTTP error (with response): forwards error response body the same way (not thrown as error).
+ *   - Network/other error: calls done(err) to surface as a Node-RED error.
+ *
+ * @returns JS string for the full axios call and response-handling block.
+ */
 function genAxiosCall(): string {
   return `
       // Build axios config
