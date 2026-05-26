@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { execFileSync } from 'node:child_process';
 import type { NodeDef, CliOptions } from './types';
 import { toNodeName } from './utils';
 import { generatePackageJson } from './generate-package-json';
@@ -37,6 +38,13 @@ export function generate(nodeDef: NodeDef, opts: CliOptions): string {
     const iconDst = path.join(iconsDir, path.basename(opts.icon));
     fs.copyFileSync(path.resolve(opts.icon), iconDst);
     console.log(`  written: ${iconDst}`);
+  }
+
+  // Pack as tgz
+  if (opts.tgz) {
+    const npmCmd = process.platform === 'win32' ? 'npm.cmd' : 'npm';
+    const tgzName = execFileSync(npmCmd, ['pack', './' + nodeName], { cwd: path.resolve(opts.output), encoding: 'utf8' }).trim();
+    console.log(`  packed : ${path.resolve(opts.output, tgzName)}`);
   }
 
   return outputDir;
