@@ -1,6 +1,16 @@
-// ============================================================
-// Field type definitions
-// ============================================================
+/**
+ * Central type contract shared across the entire code generation pipeline.
+ *
+ * Data flow (producer → consumer):
+ *   FieldType   : resolveFieldType (parser.ts) → FieldDef.type
+ *   FieldDef    : schemaToField / makeAdditionalPropertiesField (parser.ts)
+ *                   → genFieldRow, genDefaults, genWidgetInits (generate-html.ts)
+ *                   → genEndpointBlock, genResolveTypedInput, body builders (generate-runtime.ts)
+ *   EndpointDef : extractEndpoint (parser.ts) → all generators
+ *   NodeDef     : parseSpec (parser.ts) → generateHtml / generateRuntime
+ *   SecurityDef : extractSecurity (parser.ts) → genAuthConfigHtml / genAuthBlock
+ *   CliOptions  : build-nodes.ts (CLI entry point) → generator.ts → generateHtml
+ */
 
 /** Flattened representation of an OpenAPI field for Node-RED UI rendering */
 export type FieldType =
@@ -12,6 +22,17 @@ export type FieldType =
   | 'array-of-string'
   | 'unknown';
 
+/**
+ * Represents a single input parameter (path/query/header or body property) in a form
+ * ready for Node-RED UI rendering and runtime value resolution.
+ *
+ * The `type` and `isAdditionalProperties` flags together determine the widget rendered
+ * in the editor and how the runtime evaluates the stored value:
+ *   - isAdditionalProperties=true  → editableList of key-value rows (map/msg widget)
+ *   - type='array-of-string'       → editableList of string items (list/msg widget)
+ *   - type='enum'                  → <select> (no TypedInput)
+ *   - others                       → TypedInput widget
+ */
 export interface FieldDef {
   /** Field name */
   name: string;
@@ -33,7 +54,7 @@ export interface FieldDef {
   isAdditionalProperties?: boolean;
 }
 
-/** Definition of a single endpoint */
+/** Definition of a single API endpoint, with all input fields flattened for UI rendering. */
 export interface EndpointDef {
   /** Unique operation identifier */
   operationId: string;
@@ -49,7 +70,7 @@ export interface EndpointDef {
   fields: FieldDef[];
 }
 
-/** Node definition extracted from an entire OpenAPI spec */
+/** Top-level node definition extracted from an entire OpenAPI spec; the root input to all generators. */
 export interface NodeDef {
   /** info.title from the spec */
   title: string;
