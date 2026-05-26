@@ -95,4 +95,6 @@ export interface CliOptions {
   icon?: string;
   /** --color */
   color?: string;
+  /** --tgz */
+  tgz?: boolean;
 }
